@@ -5,9 +5,8 @@ seguimiento de [Momento-A](https://github.com/LuisP11127/Momento-A) y
 [Momento-B](https://github.com/LuisP11127/Momento-B) y dice cuáles pueden llegar a **+50 % en los 10 días
 siguientes**. [Scanner-pump](https://github.com/LuisP11127/Scanner-pump) se usa para comparar.
 
-Estado: ya están la copia diaria de las tres listas, las etiquetas (qué monedas llegaron a +50 %), las
-señales de cada moneda, la reconstrucción desde 2023, el entrenamiento de la red y la predicción diaria.
-Falta la web (ver [Lo que falta](#lo-que-falta)).
+**Web:** https://luisp11127.github.io/Red-Neuronal-Momentos/ (cuando GitHub Pages esté activado, ver
+[Workflows de GitHub](#workflows-de-github)).
 
 ## Días y velas
 
@@ -137,6 +136,21 @@ vacías. Como cada predicción guarda sus señales, se pueden comparar con las d
 misma moneda cuando se publiquen. Si el día ya tiene predicción no se repite, así conserva el precio de la
 primera.
 
+## La web
+
+`python -m red_momentos.web sitio` genera la página (la publica el workflow **Web**):
+
+- **Lista del día:** solo las monedas que pasan el umbral, cada una con su puntuación, el precio de las
+  19:30, el precio actual, el máximo desde las 19:30 y si ya llegó a +50 %. Si ninguna pasa el umbral, lo
+  dice y no muestra nada. Debajo, todas las candidatas del día ordenadas por puntuación.
+- **Seguimiento de la red:** las monedas que mostró cada día con su resultado a 10 días (verde si llegó a
+  +50 %), cuántas acertó y cuántas llegaron entre todas las candidatas de esos días, para comparar.
+- **Tus estrellas** (★) al lado de cada moneda; la red no las usa.
+- **Cómo decide:** el umbral y los resultados de la red en la validación y con tus listas reales.
+
+Los precios actuales y el máximo de los últimos 10 días los pide la página a Binance desde tu navegador
+(`api.binance.com` y `fapi.binance.com`).
+
 ## Workflows de GitHub
 
 | Workflow | Cuándo | Qué hace |
@@ -144,10 +158,12 @@ primera.
 | **Diario** (`diario.yml`) | Cada día a las 00:30 UTC (19:30 hora Lima) y a mano en **Actions → Diario → Run workflow**. | Copia las tres listas, calcula las etiquetas y las señales y guarda los cambios en `datos/`. El resumen de la ejecución trae la tabla de cuántas llegaron a +50 %. |
 | **Entrenar** (`entrenar.yml`) | Cada lunes a las 01:07 UTC y a mano. | Entrena la red y guarda `modelo/`. El informe sale en el resumen de la ejecución. |
 | **Reconstrucción** (`reconstruccion.yml`) | Solo a mano. | Rehace `datos/reconstruccion/filas.csv.gz`. La primera vez tarda unas 2-3 horas; lo descargado queda en la caché de Actions. |
+| **Web** (`web.yml`) | Tras cada Diario, Entrenar y Reconstrucción, cada cambio en `main` y a mano. | Publica la web en GitHub Pages. |
 | **Tests** (`tests.yml`) | En cada pull request y cambio en `main`. | Pasa las pruebas. |
 
-GitHub solo ejecuta los workflows programados desde la rama principal, así que **Diario** empieza a correr
-solo cuando este código está en `main`.
+GitHub solo ejecuta los workflows programados desde la rama principal, así que **Diario** y **Entrenar**
+empiezan a correr solo cuando este código está en `main`. Para que **Web** publique la página, GitHub Pages
+tiene que estar activado con **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 
 ### Binance
 
@@ -173,6 +189,8 @@ python -m red_momentos.reconstruccion
 python -m red_momentos.red
 # Lista de la red para el día cuya vela acaba de cerrar
 python -m red_momentos.prediccion
+# Web (sitio/index.html y sitio/datos.json)
+python -m red_momentos.web sitio
 ```
 
 ## Tests
@@ -182,7 +200,4 @@ pip install pytest
 python -m pytest
 ```
 
-## Lo que falta
-
-**La web** en GitHub Pages con la lista del día (o nada si ninguna moneda pasa el umbral), el seguimiento de
-sus propias predicciones desde el precio de las 19:30 y si coinciden con tus estrellas.
+> Esto es una herramienta de filtrado, no una recomendación de inversión.

@@ -4,6 +4,7 @@ import numpy as np
 
 from red_momentos import red, senales
 
+
 def test_cuantiles_ordenan_y_manejan_faltantes_y_empates():
     x = np.array([[1.0, 0.0], [2.0, 0.0], [3.0, 1.0], [4.0, 1.0], [np.nan, 1.0]])
     c = red.Cuantiles.ajustar(x)
@@ -13,6 +14,7 @@ def test_cuantiles_ordenan_y_manejan_faltantes_y_empates():
     assert t[2, 1] == 0.5  # falta: en el medio
     assert t[0, 1] < t[1, 1]  # 0 queda por debajo de 1 aunque haya empates
     assert np.array_equal(c.aplicar(np.array([[np.nan, np.nan]])), [[0.5, 0.5]])
+
 
 def test_la_red_en_numpy_da_lo_mismo_que_scikit_learn(tmp_path):
     from sklearn.neural_network import MLPClassifier
@@ -31,6 +33,7 @@ def test_la_red_en_numpy_da_lo_mismo_que_scikit_learn(tmp_path):
     assert np.allclose(cargada.puntuar(x), propia.puntuar(x), atol=1e-6)
     assert cargada.umbral == 0.5
 
+
 def test_elegir_umbral():
     p = np.array([0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2])
     y = np.array([1, 0, 1, 0, 0, 0, 1, 0])
@@ -38,6 +41,7 @@ def test_elegir_umbral():
     assert red.elegir_umbral(y, p, precision=0.4, minimo=1) == 0.3
     assert red.elegir_umbral(y, p, precision=0.45, minimo=1) == 0.6
     assert red.elegir_umbral(y, p, precision=0.45, minimo=5) is None
+
 
 def filas_sinteticas(n, inicio, rng, mercado="futures"):
     filas = []
@@ -50,6 +54,7 @@ def filas_sinteticas(n, inicio, rng, mercado="futures"):
                      "estado": "llego" if senal + rng.normal(scale=0.7) > 1.6 else "no_llego"})
         filas.append(fila)
     return filas
+
 
 def test_a_datos_y_tramos():
     rng = np.random.default_rng(1)
@@ -71,6 +76,7 @@ def test_a_datos_y_tramos():
     assert t["prueba"] == (date(2026, 9, 30), date(2026, 10, 12))
     assert t["validacion"][1] == date(2026, 9, 19)  # 11 días antes: la etiqueta dura 10
     assert t["entrenamiento"][1] == t["validacion"][0] - red.SEPARACION
+
 
 def test_entrenar_de_punta_a_punta():
     rng = np.random.default_rng(2)
