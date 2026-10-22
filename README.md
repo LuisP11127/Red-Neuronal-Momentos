@@ -39,12 +39,15 @@ Una fila por moneda y día de Momento-A y Momento-B. Si la misma moneda salió e
 dos listas, cuenta una vez (como **No repetidas**). Se toma futuros si salió en futuros, porque es el
 mercado con historial del libro de órdenes.
 
-**Regla:** el máximo de las 10 velas diarias siguientes llega a +50 % sobre el precio de referencia.
+**Regla:** el máximo de los 10 días siguientes llega a +50 % sobre el precio de referencia.
 
-El precio de referencia es el **cierre de la vela del día de la lista** (19:00 en Lima), no el precio del
-escaneo. La red da su lista después de ese cierre, cuando ya ve la vela completa. Si la subida se contara
-desde el escaneo, la red aprendería a señalar monedas que ya subieron entre el escaneo y el cierre, y esa
-subida ya no se puede aprovechar a las 19:30.
+El precio de referencia es el de las **19:30 en Lima (00:30 UTC)** después del cierre de la vela del día de
+la lista, la hora a la que la red da su lista; no el precio del escaneo. Para el día «2026-10-15», la vela
+cierra el 16 a las 19:00 y la referencia es el precio del 16 a las 19:30; los 10 días van hasta el 26 a las
+19:30. Se mide con velas de 30 minutos: la referencia es la apertura de la vela que empieza a las 19:30.
+
+Si la subida se contara desde el escaneo, la red aprendería a señalar monedas que ya subieron antes de las
+19:30, y esa subida ya no se puede aprovechar.
 
 | Columna | Qué es |
 |---|---|
@@ -52,12 +55,12 @@ subida ya no se puede aprovechar a las 19:30.
 | `moneda`, `mercado`, `simbolo` | la moneda (sin el multiplicador: 1000PEPE → PEPE) y el par que se usa |
 | `listas` | en qué listas salió ese día |
 | `vela_utc` | día UTC en que abre la vela de la lista |
-| `cierre` | precio de referencia |
-| `maximo`, `pct_maximo` | el máximo de las 10 velas siguientes y cuánto es frente al cierre |
+| `referencia` | precio a las 19:30 (hora Lima) |
+| `maximo`, `pct_maximo` | el máximo de los 10 días siguientes y cuánto es frente a la referencia |
 | `minimo`, `pct_minimo` | lo mismo con el mínimo |
-| `dias_hasta_50` | en qué vela (1 a 10) llegó a +50 % |
-| `velas` | cuántas de las 10 velas hay ya |
-| `estado` | `llego`, `no_llego`, `pendiente` (aún no pasaron los 10 días o no cerró la vela) o `sin_datos` |
+| `dias_hasta_50` | en qué día (1 a 10) llegó a +50 % |
+| `dias_vistos` | cuántos de los 10 días ya pasaron |
+| `estado` | `llego`, `no_llego`, `pendiente` (aún no pasaron los 10 días o aún no son las 19:30 de ese día) o `sin_datos` |
 | `explosion_mismo_dia` | `1` si ese mismo día salió en Scanner-pump |
 | `explosiones_despues` | días de los 10 siguientes en que salió en Scanner-pump |
 
@@ -105,8 +108,8 @@ python -m pytest
    buy*), explosiones anteriores, en qué listas salió, el libro de órdenes de futuros (historial `bookDepth`
    de data.binance.vision) y el interés abierto y las relaciones long/short (`metrics`).
 2. **Reconstrucción desde 2023**, aparte de las listas reales: rehacer las listas de días pasados con las
-   reglas de los tres escáneres para que la red tenga más ejemplos. Los aciertos se miden solo con las
-   listas reales.
+   reglas por defecto de los tres escáneres (los filtros que se eligen a mano en las webs no entran) para
+   que la red tenga más ejemplos. Los aciertos se miden solo con las listas reales.
 3. **La red neuronal**, que muestra una moneda solo si, en las pruebas con días pasados, al menos 3 de cada
    10 monedas con esa puntuación llegaron a +50 %. Si ninguna llega, no muestra nada.
 4. **La web** en GitHub Pages con la lista del día, el seguimiento de sus propias predicciones (desde el

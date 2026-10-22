@@ -74,7 +74,7 @@ def test_vela_de_fila_milisegundos_y_microsegundos():
 def test_api_por_paginas(monkeypatch):
     dias = {date(2026, 10, d): float(d) for d in range(1, 11)}
     sesion = Sesion({"https://www.binance.com": api_con_velas(dias)})
-    monkeypatch.setitem(binance.MERCADOS, "futures", replace(binance.FUTUROS, max_velas=4))
+    monkeypatch.setitem(binance.MERCADOS, "futures", replace(binance.FUTUROS, por_pagina=4))
     velas, cubierto = Binance(sesion, espera=0).velas_diarias("futures", "XUSDT", date(2026, 10, 2), date(2026, 10, 9))
     assert [v.dia.day for v in velas] == list(range(2, 10))
     assert cubierto == date(2026, 10, 9)
