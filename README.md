@@ -5,8 +5,9 @@ seguimiento de [Momento-A](https://github.com/LuisP11127/Momento-A) y
 [Momento-B](https://github.com/LuisP11127/Momento-B) y dice cuáles pueden llegar a **+50 % en los 10 días
 siguientes**. [Scanner-pump](https://github.com/LuisP11127/Scanner-pump) se usa para comparar.
 
-Estado: ya están la copia diaria de las tres listas y las etiquetas (qué monedas llegaron a +50 %). Falta
-lo que se describe en [Lo que falta](#lo-que-falta).
+Estado: ya están la copia diaria de las tres listas, las etiquetas (qué monedas llegaron a +50 %), las
+señales de cada moneda, la reconstrucción desde 2023, el entrenamiento de la red y la predicción diaria.
+Falta la web (ver [Lo que falta](#lo-que-falta)).
 
 ## Días y velas
 
@@ -66,11 +67,83 @@ Si la subida se contara desde el escaneo, la red aprendería a señalar monedas 
 
 Las filas que ya tienen resultado final no se vuelven a calcular.
 
+### `datos/senales.csv`
+
+Las señales de cada fila de `etiquetas.csv` **a las 19:30 (hora Lima)**, solo con lo que se sabía a esa
+hora (la lista completa está en `red_momentos/senales.py`):
+
+- **velas diarias** hasta la del día: distancia a las medias MA(7), MA(25) y MA(99), velas seguidas sobre
+  la MA(7), variación y rango de la vela, mechas, variaciones de 3, 7 y 30 días, volatilidad, volumen frente
+  a su media, número de operaciones, compras agresivas (*taker buy*), distancia al máximo y al mínimo,
+  explosiones anteriores (velas de +10 % y de +50 % de mínimo a máximo) y edad del par;
+- **listas**: en cuáles salió ese día y en cuántos de los 7 días anteriores;
+- **futuros** (archivos de data.binance.vision): la última foto del **libro de órdenes** antes de las 00:30
+  UTC (qué parte de lo que hay a ±0,2, 1, 2 y 5 % son compras, cuánto hay a ±2 % frente al volumen del día
+  y cuánto está cerca del precio), y el **interés abierto** y las **relaciones long/short** (`metrics`).
+  En spot quedan vacías.
+
+`completa` vale 1 cuando ya estaba todo publicado; data.binance.vision publica cada día hacia las 08:00
+UTC del día siguiente, así que las filas de los dos últimos días se completan después. A Binance le
+faltan algunos días de libro (por ejemplo, el 8 de octubre de 2026): esas filas quedan sin libro.
+
+### `datos/reconstruccion/filas.csv.gz`
+
+Las listas de Momento-A y Momento-B **reconstruidas desde 2023** con las reglas por defecto de cada
+escáner, sobre la vela diaria cerrada, con su etiqueta y sus señales. Va aparte de las listas reales: sirve
+para que la red tenga más ejemplos, y sus aciertos se miden solo con las listas reales. Los filtros que se
+eligen a mano en las webs no entran.
+
+- **Momento-A:** MA(7) < MA(25) < MA(99), cierre a no más de 2 % por debajo de la MA(7) y vela verde.
+- **Momento-B:** MA(7) > MA(25) y MA(7) < MA(99).
+
+Se revisan todos los pares en USDT de spot y de futuros perpetuos que cotizaron desde 2023, **también los
+que Binance ya retiró** (si no, solo quedarían las monedas que sobrevivieron), sin monedas estables, tokens
+apalancados, acciones tokenizadas ni futuros que no son criptomonedas.
+
+La etiqueta se calcula con velas diarias: la referencia es la apertura de las 00:00 UTC (19:00 en Lima) y el
+máximo, el de las 10 velas diarias siguientes. En las listas reales coincide con la etiqueta exacta de las
+19:30 en 834 de 835 casos.
+
+Comparada con las listas reales del 30 de septiembre al 20 de octubre de 2026, la reconstrucción de
+Momento-B tiene casi las mismas monedas (98 %). La de Momento-A coincide en el 38 %, porque la web mira la
+vela en curso (muchas eran verdes al escanear y cerraron rojas) y porque a veces se usó «No exigir MA25 <
+MA99».
+
+## La red
+
+`python -m red_momentos.red` entrena la red y escribe `modelo/red.json` (el modelo) y
+`modelo/INFORME.md` (los resultados). Es un perceptrón multicapa de scikit-learn; se guarda como cuantiles y
+pesos en JSON y predice con numpy, así no depende de la versión de scikit-learn.
+
+- **Tramos por fecha**, sin mezclar días y con 10 días de separación (lo que dura la etiqueta):
+  entrenamiento con la reconstrucción hasta unos cinco meses antes de las listas reales, validación con esos
+  cinco meses (ahí se elige la red y el umbral) y prueba con las listas reales.
+- **Umbral:** muestra una moneda si su puntuación supera el umbral más bajo con el que, en la validación, al
+  menos **3 de cada 10** llegaron a +50 %. Si ninguno lo consigue, no muestra nada.
+- **Comparación:** una regresión logística con las mismas señales y elegir al azar.
+- El informe dice también en qué señales se apoya más la red.
+
+## La predicción de cada día
+
+`python -m red_momentos.prediccion` (paso del workflow **Diario**, a las 19:30 hora Lima) puntúa las monedas
+de Momento-A y Momento-B del día cuya vela acaba de cerrar y guarda `predicciones/AAAA-MM-DD.json`: todas
+las candidatas ordenadas por puntuación, el precio a esa hora, cuáles pasan el umbral (`mostrar`) y sus
+señales.
+
+Las señales son las mismas que en `datos/senales.csv`, pero el libro y las métricas de futuros se toman de
+la API en ese momento, porque los archivos de data.binance.vision salen al día siguiente. La foto del libro
+de la API trae hasta 1000 niveles por lado: en las monedas muy líquidas no llega a ±5 % y esas bandas quedan
+vacías. Como cada predicción guarda sus señales, se pueden comparar con las de `datos/senales.csv` de la
+misma moneda cuando se publiquen. Si el día ya tiene predicción no se repite, así conserva el precio de la
+primera.
+
 ## Workflows de GitHub
 
 | Workflow | Cuándo | Qué hace |
 |---|---|---|
-| **Diario** (`diario.yml`) | Cada día a las 00:30 UTC (19:30 hora Lima) y a mano en **Actions → Diario → Run workflow**. | Copia las tres listas, calcula las etiquetas y guarda los cambios en `datos/`. El resumen de la ejecución trae la tabla de cuántas llegaron a +50 %. |
+| **Diario** (`diario.yml`) | Cada día a las 00:30 UTC (19:30 hora Lima) y a mano en **Actions → Diario → Run workflow**. | Copia las tres listas, calcula las etiquetas y las señales y guarda los cambios en `datos/`. El resumen de la ejecución trae la tabla de cuántas llegaron a +50 %. |
+| **Entrenar** (`entrenar.yml`) | Cada lunes a las 01:07 UTC y a mano. | Entrena la red y guarda `modelo/`. El informe sale en el resumen de la ejecución. |
+| **Reconstrucción** (`reconstruccion.yml`) | Solo a mano. | Rehace `datos/reconstruccion/filas.csv.gz`. La primera vez tarda unas 2-3 horas; lo descargado queda en la caché de Actions. |
 | **Tests** (`tests.yml`) | En cada pull request y cambio en `main`. | Pasa las pruebas. |
 
 GitHub solo ejecuta los workflows programados desde la rama principal, así que **Diario** empieza a correr
@@ -91,8 +164,15 @@ Requiere Python 3.10 o superior.
 pip install -r requirements.txt
 # Copiar las listas desde clones locales de los tres repositorios
 python -m red_momentos.listas --momento-a ../Momento-A --momento-b ../Momento-B --scanner-pump ../Scanner-pump
-# Calcular las etiquetas
+# Calcular las etiquetas y las señales
 python -m red_momentos.etiquetas
+python -m red_momentos.senales
+# Reconstruir las listas desde 2023 (unas 2-3 horas; guarda lo descargado en cache/)
+python -m red_momentos.reconstruccion
+# Entrenar la red
+python -m red_momentos.red
+# Lista de la red para el día cuya vela acaba de cerrar
+python -m red_momentos.prediccion
 ```
 
 ## Tests
@@ -104,13 +184,5 @@ python -m pytest
 
 ## Lo que falta
 
-1. **Señales de cada moneda** al cierre de la vela: velas, medias, volumen y compras agresivas (*taker
-   buy*), explosiones anteriores, en qué listas salió, el libro de órdenes de futuros (historial `bookDepth`
-   de data.binance.vision) y el interés abierto y las relaciones long/short (`metrics`).
-2. **Reconstrucción desde 2023**, aparte de las listas reales: rehacer las listas de días pasados con las
-   reglas por defecto de los tres escáneres (los filtros que se eligen a mano en las webs no entran) para
-   que la red tenga más ejemplos. Los aciertos se miden solo con las listas reales.
-3. **La red neuronal**, que muestra una moneda solo si, en las pruebas con días pasados, al menos 3 de cada
-   10 monedas con esa puntuación llegaron a +50 %. Si ninguna llega, no muestra nada.
-4. **La web** en GitHub Pages con la lista del día, el seguimiento de sus propias predicciones (desde el
-   precio de las 19:30) y si coinciden con tus estrellas.
+**La web** en GitHub Pages con la lista del día (o nada si ninguna moneda pasa el umbral), el seguimiento de
+sus propias predicciones desde el precio de las 19:30 y si coinciden con tus estrellas.

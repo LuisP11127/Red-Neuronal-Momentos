@@ -130,3 +130,41 @@ def test_error_desconocido_se_avisa():
     sesion = Sesion({"https://data-api.binance.vision": lambda u, p: Respuesta(400, {"code": -1100, "msg": "Illegal"})})
     with pytest.raises(RuntimeError):
         Binance(sesion, espera=0).velas_diarias("spot", "XUSDT", date(2026, 10, 1), date(2026, 10, 1))
+
+
+class SesionPorRangos:
+    """Sirve un archivo respetando la cabecera Range, como data.binance.vision."""
+
+    def __init__(self, contenido):
+        self.contenido = contenido
+        self.rangos = []
+
+    def get(self, url, headers=None, timeout=None, params=None):
+        fin = int(headers["Range"].split("-")[1])
+        self.rangos.append(fin + 1)
+        parte = self.contenido[: fin + 1]
+        return Respuesta(206 if len(parte) < len(self.contenido) else 200, contenido=parte)
+
+
+def test_inicio_csv_baja_solo_el_principio():
+    lineas = [f"2026-10-03 {h:02d}:{m:02d}:00,-1.00,{h * 60 + m},{h * 7 + m * 13}" for h in range(24) for m in range(60)]
+    salida = io.BytesIO()
+    with zipfile.ZipFile(salida, "w", compression=zipfile.ZIP_DEFLATED) as archivo:
+        archivo.writestr("libro.csv", "\n".join(["timestamp,percentage,depth,notional"] + lineas) + "\n")
+    sesion = SesionPorRangos(salida.getvalue())
+    cliente = Binance(sesion, espera=0)
+    filas = cliente.inicio_csv("https://x/libro.zip", lambda f: f[-1][0] > "2026-10-03 00:30:00", tamano=256)
+    assert filas[0] == ["timestamp", "percentage", "depth", "notional"]
+    assert filas[-1][0] > "2026-10-03 00:30:00" and all(len(f) == 4 for f in filas)
+    assert len(sesion.rangos) > 1 and sesion.rangos[-1] < len(sesion.contenido)  # pidió más, pero no todo
+    # Si nunca basta, acaba con el archivo entero.
+    todo = cliente.inicio_csv("https://x/libro.zip", lambda f: False, tamano=256)
+    assert len(todo) == len(lineas) + 1
+
+
+def test_inicio_csv_de_un_archivo_que_no_existe():
+    class NoEsta:
+        def get(self, url, headers=None, timeout=None):
+            return Respuesta(404)
+
+    assert Binance(NoEsta(), espera=0).inicio_csv("https://x/no.zip", lambda f: True) is None

@@ -1,0 +1,60 @@
+name: Reconstrucción
+
+# Rehace datos/reconstruccion/filas.csv.gz: las listas de Momento-A y Momento-B desde 2023 con las reglas por
+# defecto, sus etiquetas y sus señales (velas diarias de todos los pares y, en futuros, libro y métricas de
+# data.binance.vision). Solo a mano (Actions → Reconstrucción → Run workflow): la primera vez tarda unas
+# 2-3 horas; las velas y el libro ya descargados se guardan en la caché de Actions y no se repiten.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: datos
+  cancel-in-progress: false
+
+jobs:
+  reconstruir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      PYTHONUNBUFFERED: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements.txt
+
+      - uses: actions/cache@v4
+        with:
+          path: cache
+          key: reconstruccion-${{ github.run_id }}
+          restore-keys: reconstruccion-
+
+      - name: Reconstruir
+        shell: bash  # con pipefail: si falla, falla el paso aunque tee no
+        run: python -m red_momentos.reconstruccion --hilos 32 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar
+        shell: bash
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add datos/reconstruccion
+          if git diff --cached --quiet; then
+            echo "La reconstrucción no cambió."
+            exit 0
+          fi
+          git commit --quiet -m "Datos: reconstrucción (automático)"
+          for intento in 1 2 3 4 5; do
+            if git push --quiet origin "HEAD:$BRANCH"; then exit 0; fi
+            sleep $((intento * 5))
+            git pull --quiet --rebase origin "$BRANCH"
+          done
+          echo "::error title=Reconstrucción sin guardar::No se pudo subir tras varios intentos."
+          exit 1

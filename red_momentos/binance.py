@@ -16,12 +16,14 @@ from __future__ import annotations
 
 import csv
 import io
+import struct
 import threading
 import time
 import zipfile
+import zlib
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import requests
 
@@ -131,7 +133,10 @@ class Binance:
         """
         if self._api[mercado]:
             try:
-                return self._velas_api(mercado, simbolo, intervalo, desde, hasta), hasta
+                velas = self._velas_api(mercado, simbolo, intervalo, desde, hasta)
+                if velas:
+                    return velas, hasta
+                # Un par retirado ya no está en la API, pero su historial sigue en data.binance.vision.
             except SinAPI as exc:
                 with self._lock:
                     if self._api[mercado]:
@@ -165,7 +170,23 @@ class Binance:
             inicio = int(filas[-1][0]) + paso
         return velas
 
-    def _get(self, mercado: str, ruta: str, params: dict) -> list:
+    def primera_vela(self, mercado: str, simbolo: str) -> Optional[date]:
+        """Día de la primera vela diaria del par en la API, o ``None`` si la API no lo tiene."""
+        if not self._api[mercado]:
+            return None
+        try:
+            filas = self._get(mercado, MERCADOS[mercado].ruta_velas,
+                              {"symbol": simbolo, "interval": "1d", "startTime": 0, "limit": 1})
+        except SinAPI:
+            return None
+        return dia_de_ms(int(filas[0][0])) if filas else None
+
+    def info(self, mercado: str) -> dict:
+        """``exchangeInfo`` del mercado: todos los pares, también los retirados (BREAK, SETTLING)."""
+        ruta = "/api/v3/exchangeInfo" if mercado == "spot" else "/fapi/v1/exchangeInfo"
+        return self._get(mercado, ruta, {}, forma=dict)
+
+    def _get(self, mercado: str, ruta: str, params: dict, forma: type = list) -> Any:
         """GET a la API. Un par que no existe en ese mercado devuelve una lista vacía."""
         fallos = 0
         ultimo = "sin respuesta"
@@ -193,13 +214,13 @@ class Binance:
                     datos = resp.json()
                 except ValueError:
                     datos = None
-                if isinstance(datos, list):
+                if isinstance(datos, forma):
                     return datos
                 # Una página que no es la API (p. ej. la comprobación anti-robots de la web de Binance).
                 ultimo = f"{base} no devolvió datos de la API"
                 self._descartar(mercado, base)
-            elif resp.status_code == 400 and _codigo(resp) == -1121:
-                return []  # «Invalid symbol»: el par no existe (o ya no) en este mercado
+            elif resp.status_code == 400 and _codigo(resp) in (-1121, -1122):
+                return []  # «Invalid symbol» o «Invalid symbol status»: el par no existe o no cotiza
             elif resp.status_code in (202, 403, 451):
                 ultimo = f"{base}: {resp.status_code}"
                 self._descartar(mercado, base)
@@ -223,19 +244,20 @@ class Binance:
     def _velas_vision(self, mercado: str, simbolo: str, intervalo: str, desde: date, hasta: date) -> list[Vela]:
         carpeta = f"{VISION}/{MERCADOS[mercado].vision}"
         velas: dict[int, Vela] = {}
+        # El archivo de un mes se publica a principios del siguiente: hasta entonces, uno por día.
+        recientes = (date.today().replace(day=1) - UN_DIA).replace(day=1)
         mes = desde.replace(day=1)
         while mes <= hasta:
             siguiente = (mes + timedelta(days=32)).replace(day=1)
             filas = self._zip(f"{carpeta}/monthly/klines/{simbolo}/{intervalo}/{simbolo}-{intervalo}-{mes:%Y-%m}.zip")
-            if filas is None:
-                # El mes en curso (o uno recién terminado) solo está en archivos diarios.
+            if filas is None and mes >= recientes:
                 dia, fin = max(desde, mes), min(hasta, siguiente - UN_DIA)
                 filas = []
                 while dia <= fin:
                     filas += self._zip(f"{carpeta}/daily/klines/{simbolo}/{intervalo}/"
                                        f"{simbolo}-{intervalo}-{dia:%Y-%m-%d}.zip") or []
                     dia += UN_DIA
-            for fila in filas:
+            for fila in filas or []:  # sin archivo de un mes antiguo: el par no cotizaba
                 vela = vela_de_fila(fila)
                 velas[vela.apertura] = vela
             mes = siguiente
@@ -252,8 +274,48 @@ class Binance:
             self._publicado[clave] = dia
         return self._publicado[clave]
 
-    def _zip(self, url: str) -> Optional[list[list[str]]]:
-        """Filas del CSV de un archivo de data.binance.vision, o ``None`` si no existe."""
+    def inicio_csv(self, url: str, basta: Callable[[list[list[str]]], bool],
+                   tamano: int = 24_576) -> Optional[list[list[str]]]:
+        """Primeras filas del CSV de un archivo de data.binance.vision sin bajarlo entero.
+
+        Pide los primeros ``tamano`` bytes del zip y descomprime lo que llega; si con esas filas aún no
+        ``basta``, pide el doble. ``None`` si el archivo no existe.
+        """
+        while True:
+            resp = None
+            for intento in range(self.reintentos + 1):
+                try:
+                    resp = self.sesion.get(url, headers={"Range": f"bytes=0-{tamano - 1}"}, timeout=self.timeout)
+                except requests.RequestException:
+                    resp = None
+                if resp is not None and resp.status_code in (200, 206, 404):
+                    break
+                if intento < self.reintentos:
+                    time.sleep(self.espera * 2 ** intento)
+            if resp is None or resp.status_code not in (200, 206, 404):
+                raise RuntimeError(f"data.binance.vision no responde: {url}")
+            if resp.status_code == 404:
+                return None
+            datos = resp.content
+            completo = resp.status_code == 200 or len(datos) < tamano
+            # Cabecera local del zip: 30 bytes, el nombre y un campo extra; después, los datos en deflate.
+            metodo, = struct.unpack("<H", datos[8:10])
+            largo_nombre, largo_extra = struct.unpack("<HH", datos[26:30])
+            cuerpo = datos[30 + largo_nombre + largo_extra:]
+            texto = zlib.decompressobj(-15).decompress(cuerpo) if metodo == 8 else cuerpo  # 0: sin comprimir
+            if not completo:
+                texto = texto[:texto.rfind(b"\n") + 1]  # la última línea puede estar a medias
+            filas = [f for f in csv.reader(io.StringIO(texto.decode("utf-8", errors="ignore"))) if f]
+            if completo or basta(filas):
+                return filas
+            tamano *= 2
+
+    def _zip(self, url: str, solo_velas: bool = True) -> Optional[list[list[str]]]:
+        """Filas del CSV de un archivo de data.binance.vision, o ``None`` si no existe.
+
+        Con ``solo_velas`` se quitan la cabecera y todo lo que no empiece por un número (los archivos de
+        velas de futuros traen cabecera; los de spot, no).
+        """
         for intento in range(self.reintentos + 1):
             try:
                 resp = self.sesion.get(url, timeout=self.timeout)
@@ -264,8 +326,7 @@ class Binance:
             if resp is not None and resp.status_code == 200:
                 with zipfile.ZipFile(io.BytesIO(resp.content)) as archivo:
                     texto = archivo.read(archivo.namelist()[0]).decode("utf-8")
-                # Los de futuros traen una cabecera («open_time,open,...»); los de spot, no.
-                return [fila for fila in csv.reader(io.StringIO(texto)) if fila and fila[0].isdigit()]
+                return [fila for fila in csv.reader(io.StringIO(texto)) if fila and (fila[0].isdigit() or not solo_velas)]
             if intento < self.reintentos:
                 time.sleep(self.espera * 2 ** intento)
         raise RuntimeError(f"data.binance.vision no responde: {url}")
