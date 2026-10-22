@@ -11,7 +11,7 @@ etiqueta), para que la red no vea nada del tramo con el que se la mide:
 - validación: la reconstrucción de esos cinco meses; aquí se elige la red y el umbral;
 - prueba: las listas reales (y, para comparar, la reconstrucción de esos mismos días).
 
-**Señales.** Las de ``senales.SENALES`` y tres más que dicen si hay libro, métricas y si es futuros. Cada
+**Señales.** Las de ``senales.SENALES`` (menos ``EXCLUIDAS``) y tres más que dicen si hay libro, métricas y si es futuros. Cada
 señal se pasa a su posición entre los valores del entrenamiento (de 0 a 1, por cuantiles), así los valores
 extremos no pesan de más; un dato que falta queda en 0,5 y lo marca su indicador.
 
@@ -50,7 +50,10 @@ SEPARACION = timedelta(days=etiquetas.VENTANA + 1)
 VALIDACION = timedelta(days=150)
 CUANTILES = 101
 INDICADORES = ["tiene_libro", "tiene_metricas", "es_futuros"]
-ENTRADAS = senales.SENALES + INDICADORES
+# Binance publica la banda de ±0,2 % del libro solo desde enero de 2026: en el entrenamiento casi siempre
+# falta y en la validación casi nunca, así que la red aprendería la fecha y no la señal.
+EXCLUIDAS = {"libro_deseq_02"}
+ENTRADAS = [k for k in senales.SENALES if k not in EXCLUIDAS] + INDICADORES
 CONFIGURACIONES = [  # se elige la que mejor ordena la validación
     {"hidden_layer_sizes": (32,), "alpha": 1e-3},
     {"hidden_layer_sizes": (64, 32), "alpha": 1e-3},
@@ -87,10 +90,12 @@ def _valor(texto: str) -> float:
 def matriz(filas: list[dict]) -> np.ndarray:
     """Las entradas de la red (``ENTRADAS``) de cada fila con señales (strings del CSV)."""
     x = np.array([[_valor(f.get(k, "")) for k in senales.SENALES] for f in filas], dtype=float).reshape(-1, len(senales.SENALES))
-    tiene_libro = (~np.isnan(x[:, [senales.SENALES.index(k) for k in senales.LIBRO]])).any(axis=1)
+    libro = [senales.SENALES.index(k) for k in senales.LIBRO if k not in EXCLUIDAS]
+    tiene_libro = (~np.isnan(x[:, libro])).any(axis=1)
     tiene_metricas = (~np.isnan(x[:, [senales.SENALES.index(k) for k in senales.METRICAS]])).any(axis=1)
     es_futuros = np.array([f["mercado"] == "futures" for f in filas], dtype=bool)
-    return np.hstack([x, np.column_stack([tiene_libro, tiene_metricas, es_futuros]).astype(float)])
+    columnas = [senales.SENALES.index(k) for k in ENTRADAS if k not in INDICADORES]
+    return np.hstack([x[:, columnas], np.column_stack([tiene_libro, tiene_metricas, es_futuros]).astype(float)])
 
 
 def a_datos(filas: list[dict]) -> Datos:
