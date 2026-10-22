@@ -175,7 +175,7 @@ async function pintarHoy(datos) {
   let html = `<h2>Lista del ${fecha(hoy.fecha)}</h2>
     <p class="nota">Calculada el ${horaLima(hoy.hora)} (hora Lima) con ${hoy.monedas.length} candidatas de las listas de ese día.</p>`;
   if (!mostradas.length) {
-    html += `<div class="vacio">Hoy la red no muestra ninguna moneda: ninguna de las ${hoy.monedas.length} candidatas pasó el umbral.</div>`;
+    html += `<div class="vacio">En esta lista la red no muestra ninguna moneda: ninguna de las ${hoy.monedas.length} candidatas pasó el umbral.</div>`;
   } else {
     html += `<div class="tarjetas" id="tarjetas-hoy">${mostradas.map((m) => tarjeta(datos, hoy.fecha, m, null)).join("")}</div>`;
   }
