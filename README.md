@@ -111,15 +111,23 @@ MA99».
 ## La red
 
 `python -m red_momentos.red` entrena la red y escribe `modelo/red.json` (el modelo) y
-`modelo/INFORME.md` (los resultados). Es un perceptrón multicapa de scikit-learn; se guarda como cuantiles y
-pesos en JSON y predice con numpy, así no depende de la versión de scikit-learn.
+`modelo/INFORME.md` (los resultados). Es un perceptrón multicapa de scikit-learn (64 y 32 neuronas); la
+puntuación es la media de 5 redes entrenadas con distinta semilla. Se guarda como cuantiles y pesos en JSON y
+predice con numpy, así no depende de la versión de scikit-learn.
 
-- **Tramos por fecha**, sin mezclar días y con 10 días de separación (lo que dura la etiqueta):
-  entrenamiento con la reconstrucción hasta unos cinco meses antes de las listas reales, validación con esos
-  cinco meses (ahí se elige la red y el umbral) y prueba con las listas reales.
+- **Tramos por fecha**, sin mezclar días y con 11 días de separación (la etiqueta dura 10): prueba con los
+  últimos 90 días (o desde el inicio de las listas reales, mientras lleven menos), validación con los 150
+  días anteriores y entrenamiento con todo lo de antes. En validación y entrenamiento entran la
+  reconstrucción y las listas reales de esos días, así que con el tiempo la red también aprende de tus
+  listas. Entrenar cada lunes mueve los tramos.
+- **Elección:** se prueban dos regularizaciones y dos números de épocas, y se queda la que mejor ordena la
+  validación.
 - **Umbral:** muestra una moneda si su puntuación supera el umbral más bajo con el que, en la validación, al
-  menos **3 de cada 10** llegaron a +50 %. Si ninguno lo consigue, no muestra nada.
+  menos **3 de cada 10** llegaron a +50 % (con al menos 20 monedas sobre el umbral). Si ninguno lo consigue,
+  no muestra nada.
 - **Comparación:** una regresión logística con las mismas señales y elegir al azar.
+- La red no usa la banda de ±0,2 % del libro: Binance la publica solo desde enero de 2026 y la red
+  aprendería la fecha y no la señal.
 - El informe dice también en qué señales se apoya más la red.
 
 ## La predicción de cada día

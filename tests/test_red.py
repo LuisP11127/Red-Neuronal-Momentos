@@ -24,8 +24,13 @@ def test_la_red_en_numpy_da_lo_mismo_que_scikit_learn(tmp_path):
     y = (x[:, 0] + rng.normal(scale=0.5, size=400) > 0.5).astype(int)
     cuantiles = red.Cuantiles.ajustar(x)
     modelo = MLPClassifier(hidden_layer_sizes=(8, 4), max_iter=2000, random_state=0).fit(cuantiles.aplicar(x), y)
-    propia = red.Red(cuantiles, list(modelo.coefs_), list(modelo.intercepts_), 0.5, ["a", "b", "c"])
+    propia = red.Red(cuantiles, [(list(modelo.coefs_), list(modelo.intercepts_))], 0.5, ["a", "b", "c"])
     assert np.allclose(propia.puntuar(x), modelo.predict_proba(cuantiles.aplicar(x))[:, 1])
+    # Con varias redes, la media de sus puntuaciones.
+    otro = MLPClassifier(hidden_layer_sizes=(8, 4), max_iter=2000, random_state=1).fit(cuantiles.aplicar(x), y)
+    dos = red.Red(cuantiles, propia.redes + [(list(otro.coefs_), list(otro.intercepts_))], 0.5, ["a", "b", "c"])
+    media = (modelo.predict_proba(cuantiles.aplicar(x))[:, 1] + otro.predict_proba(cuantiles.aplicar(x))[:, 1]) / 2
+    assert np.allclose(dos.puntuar(x), media)
 
     ruta = tmp_path / "red.json"
     propia.guardar(ruta, {"informe": {}})
@@ -73,9 +78,22 @@ def test_a_datos_y_tramos():
     reales = red.Datos(np.array(["2026-09-30", "2026-10-12"], dtype="datetime64[D]"), np.array(["A", "B"]),
                        np.zeros((2, 1)), np.zeros(2))
     t = red.tramos(recon, reales)
-    assert t["prueba"] == (date(2026, 9, 30), date(2026, 10, 12))
+    assert t["prueba"] == (date(2026, 9, 30), date(2026, 10, 12))  # las listas reales llevan menos de 90 días
     assert t["validacion"][1] == date(2026, 9, 19)  # 11 días antes: la etiqueta dura 10
     assert t["entrenamiento"][1] == t["validacion"][0] - red.SEPARACION
+
+    # Con más de 90 días de listas reales, la prueba son los últimos 90.
+    largas = red.Datos(np.array(["2026-01-01", "2026-10-12"], dtype="datetime64[D]"), np.array(["A", "B"]),
+                       np.zeros((2, 1)), np.zeros(2))
+    assert red.tramos(recon, largas)["prueba"] == (date(2026, 7, 14), date(2026, 10, 12))
+
+
+def test_unir_prefiere_la_fila_real():
+    recon = red.Datos(np.array(["2026-01-01", "2026-01-02"], dtype="datetime64[D]"), np.array(["A", "A"]),
+                      np.array([[1.0], [2.0]]), np.array([0.0, 0.0]))
+    reales = red.Datos(np.array(["2026-01-02"], dtype="datetime64[D]"), np.array(["A"]), np.array([[9.0]]), np.array([1.0]))
+    juntos = red.unir(recon, reales)
+    assert juntos.x.ravel().tolist() == [1.0, 9.0] and juntos.y.tolist() == [0.0, 1.0]
 
 
 def test_entrenar_de_punta_a_punta():

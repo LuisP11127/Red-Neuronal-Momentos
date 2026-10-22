@@ -7,11 +7,21 @@ completas.
 **Tramos por fecha**, sin mezclar días y con 10 días de separación entre uno y otro (lo que dura la
 etiqueta), para que la red no vea nada del tramo con el que se la mide:
 
-- entrenamiento: la reconstrucción hasta unos cinco meses antes de las listas reales;
-- validación: la reconstrucción de esos cinco meses; aquí se elige la red y el umbral;
-- prueba: las listas reales (y, para comparar, la reconstrucción de esos mismos días).
+- prueba: los últimos 90 días, o desde el inicio de las listas reales mientras lleven menos; se mide con las
+  listas reales (y, para comparar, con la reconstrucción de esos días);
+- validación: los 150 días anteriores; aquí se elige la red y el umbral;
+- entrenamiento: todo lo anterior.
 
-**Señales.** Las de ``senales.SENALES`` (menos ``EXCLUIDAS``) y tres más que dicen si hay libro, métricas y si es futuros. Cada
+En validación y entrenamiento entran la reconstrucción y las listas reales de esos días (si una moneda y día
+está en las dos, queda la real). Así, cuando las listas reales pasen de 90 días, la red también aprende de
+ellas.
+
+**Red.** Un perceptrón multicapa (64 y 32 neuronas); se prueban dos regularizaciones y dos números de épocas
+y se queda la que mejor ordena la validación. La puntuación es la media de 5 redes entrenadas con distinta
+semilla.
+
+**Señales.** Las de ``senales.SENALES`` (menos ``EXCLUIDAS``) y tres más que dicen si hay libro, métricas y si
+es futuros. Cada
 señal se pasa a su posición entre los valores del entrenamiento (de 0 a 1, por cuantiles), así los valores
 extremos no pesan de más; un dato que falta queda en 0,5 y lo marca su indicador.
 
@@ -35,6 +45,7 @@ import gzip
 import json
 import math
 import sys
+import warnings
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -54,11 +65,12 @@ INDICADORES = ["tiene_libro", "tiene_metricas", "es_futuros"]
 # falta y en la validación casi nunca, así que la red aprendería la fecha y no la señal.
 EXCLUIDAS = {"libro_deseq_02"}
 ENTRADAS = [k for k in senales.SENALES if k not in EXCLUIDAS] + INDICADORES
-CONFIGURACIONES = [  # se elige la que mejor ordena la validación
-    {"hidden_layer_sizes": (32,), "alpha": 1e-3},
-    {"hidden_layer_sizes": (64, 32), "alpha": 1e-3},
-    {"hidden_layer_sizes": (64, 32), "alpha": 1e-2},
-]
+# Se elige la que mejor ordena la validación. Con más épocas o menos regularización la red se aprende el
+# entrenamiento y ordena peor la validación.
+CONFIGURACIONES = [{"hidden_layer_sizes": (64, 32), "alpha": alpha, "max_iter": epocas}
+                   for alpha in (0.1, 1.0) for epocas in (20, 40)]
+SEMILLAS = 5  # redes que se promedian: cada una por separado varía bastante
+PRUEBA = timedelta(days=90)
 RECONSTRUCCION = Path("datos/reconstruccion/filas.csv.gz")
 MODELO = Path("modelo/red.json")
 INFORME = Path("modelo/INFORME.md")
@@ -154,44 +166,63 @@ class Cuantiles:
 
 @dataclass
 class Red:
-    """La red ya entrenada, con lo necesario para predecir sin scikit-learn."""
+    """Las redes ya entrenadas, con lo necesario para predecir sin scikit-learn.
+
+    ``redes`` son los pesos y sesgos de cada red (misma forma, distinta semilla); la puntuación es la media.
+    """
     cuantiles: Cuantiles
-    pesos: list[np.ndarray]
-    sesgos: list[np.ndarray]
+    redes: list[tuple[list[np.ndarray], list[np.ndarray]]]
     umbral: Optional[float]
     entradas: list[str]
 
     def puntuar(self, x: np.ndarray) -> np.ndarray:
-        a = self.cuantiles.aplicar(x)
-        for w, b in zip(self.pesos[:-1], self.sesgos[:-1]):
-            a = np.maximum(a @ w + b, 0)
-        return 1 / (1 + np.exp(-(a @ self.pesos[-1] + self.sesgos[-1]).ravel()))
+        entrada = self.cuantiles.aplicar(x)
+        total = np.zeros(len(entrada))
+        for pesos, sesgos in self.redes:
+            a = entrada
+            for w, b in zip(pesos[:-1], sesgos[:-1]):
+                a = np.maximum(a @ w + b, 0)
+            total += 1 / (1 + np.exp(-(a @ pesos[-1] + sesgos[-1]).ravel()))
+        return total / len(self.redes)
 
     def guardar(self, ruta: Path, extra: dict) -> None:
         ruta.parent.mkdir(parents=True, exist_ok=True)
         ruta.write_text(json.dumps({
             "entradas": self.entradas, "umbral": self.umbral,
             "cuantiles": np.round(self.cuantiles.puntos, 8).tolist(),
-            "pesos": [np.round(w, 8).tolist() for w in self.pesos],
-            "sesgos": [np.round(b, 8).tolist() for b in self.sesgos], **extra,
+            "redes": [{"pesos": [np.round(w, 8).tolist() for w in pesos],
+                       "sesgos": [np.round(b, 8).tolist() for b in sesgos]} for pesos, sesgos in self.redes],
+            **extra,
         }, ensure_ascii=False))
 
     @classmethod
     def cargar(cls, ruta: Path = MODELO) -> "Red":
         d = json.loads(ruta.read_text())
-        return cls(Cuantiles(np.array(d["cuantiles"])), [np.array(w) for w in d["pesos"]],
-                   [np.array(b) for b in d["sesgos"]], d["umbral"], d["entradas"])
+        redes = [([np.array(w) for w in r["pesos"]], [np.array(b) for b in r["sesgos"]]) for r in d["redes"]]
+        return cls(Cuantiles(np.array(d["cuantiles"])), redes, d["umbral"], d["entradas"])
 
 
-def entrenar_red(x: np.ndarray, y: np.ndarray, configuracion: dict, semilla: int = 0) -> Red:
+def entrenar_red(x: np.ndarray, y: np.ndarray, configuracion: dict, semillas: int = SEMILLAS) -> Red:
+    """Entrena ``semillas`` redes con ``configuracion`` (capas, alpha y épocas).
+
+    Sin parada temprana: la de scikit-learn mira la exactitud, que apenas cambia cuando solo el 5 % llega a
+    +50 %, y cortaba el entrenamiento a las pocas épocas.
+    """
+    from sklearn.exceptions import ConvergenceWarning
     from sklearn.neural_network import MLPClassifier
 
     cuantiles = Cuantiles.ajustar(x)
-    modelo = MLPClassifier(activation="relu", solver="adam", batch_size=512, learning_rate_init=1e-3,
-                           max_iter=200, early_stopping=True, validation_fraction=0.1, n_iter_no_change=10,
-                           random_state=semilla, **configuracion)
-    modelo.fit(cuantiles.aplicar(x), y.astype(int))
-    return Red(cuantiles, list(modelo.coefs_), list(modelo.intercepts_), None, ENTRADAS)
+    entrada = cuantiles.aplicar(x)
+    redes = []
+    for semilla in range(semillas):
+        modelo = MLPClassifier(activation="relu", solver="adam", batch_size=512, learning_rate_init=1e-3,
+                               early_stopping=False, tol=0, n_iter_no_change=10**6, random_state=semilla,
+                               **configuracion)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ConvergenceWarning)  # se para a propósito en max_iter épocas
+            modelo.fit(entrada, y.astype(int))
+        redes.append((list(modelo.coefs_), list(modelo.intercepts_)))
+    return Red(cuantiles, redes, None, ENTRADAS)
 
 
 def entrenar_logistica(x: np.ndarray, y: np.ndarray):
@@ -261,23 +292,37 @@ def importancias(red: Red, datos: Datos, repeticiones: int = 3, semilla: int = 0
 
 # --- Entrenamiento completo ------------------------------------------------------------------------------
 
+def unir(reconstruccion: Datos, reales: Datos) -> Datos:
+    """Las dos fuentes juntas; si una moneda y día está en las dos, queda la real."""
+    vistas = set(zip(reales.fechas.tolist(), reales.monedas.tolist()))
+    quedan = np.array([(f, m) not in vistas for f, m in zip(reconstruccion.fechas.tolist(),
+                                                            reconstruccion.monedas.tolist())], dtype=bool)
+    return Datos(np.concatenate([reconstruccion.fechas[quedan], reales.fechas]),
+                 np.concatenate([reconstruccion.monedas[quedan], reales.monedas]),
+                 np.vstack([reconstruccion.x[quedan], reales.x]), np.concatenate([reconstruccion.y[quedan], reales.y]))
+
+
 def tramos(reconstruccion: Datos, reales: Datos) -> dict[str, tuple[date, date]]:
-    inicio_prueba = (reales.fechas.min().astype(date) if len(reales)
-                     else reconstruccion.fechas.max().astype(date) - VALIDACION)
+    """Prueba: los últimos 90 días (o desde el inicio de las listas reales, si llevan menos). Antes, la
+    validación (150 días) y el entrenamiento, con 11 días de separación entre tramos."""
+    fin = max(reconstruccion.fechas.max().astype(date), reales.fechas.max().astype(date) if len(reales) else date.min)
+    inicio_prueba = fin - PRUEBA
+    if len(reales):
+        inicio_prueba = max(inicio_prueba, reales.fechas.min().astype(date))
     fin_validacion = inicio_prueba - SEPARACION
     inicio_validacion = fin_validacion - VALIDACION
     fin_entrenamiento = inicio_validacion - SEPARACION
     return {"entrenamiento": (reconstruccion.fechas.min().astype(date), fin_entrenamiento),
-            "validacion": (inicio_validacion, fin_validacion),
-            "prueba": (inicio_prueba, max(reconstruccion.fechas.max().astype(date),
-                                          reales.fechas.max().astype(date) if len(reales) else inicio_prueba))}
+            "validacion": (inicio_validacion, fin_validacion), "prueba": (inicio_prueba, fin)}
 
 
 def entrenar(reconstruccion: Datos, reales: Datos) -> tuple[Red, dict]:
     t = tramos(reconstruccion, reales)
-    entreno = reconstruccion.tramo(*t["entrenamiento"])
-    valid = reconstruccion.tramo(*t["validacion"])
+    # Las listas reales anteriores a la prueba también enseñan (y validan) a la red.
+    entreno = unir(reconstruccion.tramo(*t["entrenamiento"]), reales.tramo(*t["entrenamiento"]))
+    valid = unir(reconstruccion.tramo(*t["validacion"]), reales.tramo(*t["validacion"]))
     prueba_recon = reconstruccion.tramo(*t["prueba"])
+    prueba_reales = reales.tramo(*t["prueba"])
 
     candidatas = []
     for configuracion in CONFIGURACIONES:
@@ -290,11 +335,12 @@ def entrenar(reconstruccion: Datos, reales: Datos) -> tuple[Red, dict]:
 
     informe: dict = {"tramos": {k: [a.isoformat(), b.isoformat()] for k, (a, b) in t.items()},
                      "configuracion": {k: list(v) if isinstance(v, tuple) else v for k, v in configuracion.items()},
+                     "semillas": SEMILLAS,
                      "configuraciones_probadas": [{"configuracion": str(c), "auc_validacion": round(a, 4)}
                                                   for a, c, _ in candidatas],
                      "umbral": red.umbral, "precision_minima": PRECISION_MINIMA, "evaluacion": {}}
     for nombre, datos in (("entrenamiento", entreno), ("validacion", valid), ("prueba: reconstrucción", prueba_recon),
-                          ("prueba: listas reales", reales)):
+                          ("prueba: listas reales", prueba_reales)):
         if not len(datos):
             continue
         p = red.puntuar(datos.x)
@@ -320,11 +366,12 @@ def _num(v: float) -> str:
 def informe_markdown(informe: dict) -> str:
     t = informe["tramos"]
     lineas = ["# Informe de la red", "",
-              f"- Entrenamiento: {t['entrenamiento'][0]} a {t['entrenamiento'][1]} (reconstrucción).",
-              f"- Validación: {t['validacion'][0]} a {t['validacion'][1]} (reconstrucción).",
-              f"- Prueba: desde {t['prueba'][0]} (listas reales y, para comparar, la reconstrucción de esos días).",
-              f"- Red elegida: capas {informe['configuracion']['hidden_layer_sizes']}, "
-              f"alpha {informe['configuracion']['alpha']}.",
+              f"- Entrenamiento: {t['entrenamiento'][0]} a {t['entrenamiento'][1]} (reconstrucción y listas reales de esos días).",
+              f"- Validación: {t['validacion'][0]} a {t['validacion'][1]} (reconstrucción y listas reales de esos días).",
+              f"- Prueba: {t['prueba'][0]} a {t['prueba'][1]} (listas reales y, para comparar, la reconstrucción de esos días).",
+              f"- Red elegida: media de {informe.get('semillas', 1)} redes con capas "
+              f"{informe['configuracion']['hidden_layer_sizes']}, alpha {informe['configuracion']['alpha']} y "
+              f"{informe['configuracion'].get('max_iter')} épocas.",
               "- Umbral: " + (f"{informe['umbral']:.3f} (al menos 3 de cada 10 llegaron en la validación)."
                               if informe["umbral"] is not None else
                               "ninguno: en la validación ningún umbral llegó a 3 de cada 10, así que la red no "
