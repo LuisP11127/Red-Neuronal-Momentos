@@ -1,0 +1,36 @@
+{
+ "estrellas": {
+  "2026-10-06|futures:ICNTUSDT": {
+   "activa": true,
+   "hora": "2026-10-07T15:27:24.593Z"
+  },
+  "2026-10-06|futures:INUSDT": {
+   "activa": true,
+   "hora": "2026-10-07T15:24:44.605Z"
+  },
+  "2026-10-11|futures:AIOUSDT": {
+   "activa": true,
+   "hora": "2026-10-12T16:51:47.669Z"
+  },
+  "2026-10-11|futures:COLLECTUSDT": {
+   "activa": true,
+   "hora": "2026-10-12T16:55:00.487Z"
+  },
+  "2026-10-17|futures:MAGMAUSDT": {
+   "activa": true,
+   "hora": "2026-10-18T17:04:36.320Z"
+  },
+  "2026-10-19|futures:JCTUSDT": {
+   "activa": false,
+   "hora": "2026-10-20T22:39:28.773Z"
+  },
+  "2026-10-19|futures:MAGMAUSDT": {
+   "activa": true,
+   "hora": "2026-10-20T22:37:07.505Z"
+  },
+  "2026-10-20|futures:BLUAIUSDT": {
+   "activa": true,
+   "hora": "2026-10-21T16:15:46.101Z"
+  }
+ }
+}

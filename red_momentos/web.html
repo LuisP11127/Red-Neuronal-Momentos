@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Red-Neuronal-Momentos</title>
+<style>
+  :root {
+    --fondo: #f6f7f9; --tarjeta: #ffffff; --texto: #1d2330; --suave: #5f6b7d; --borde: #e1e5ec;
+    --verde: #0f8a4b; --verde-fondo: #e6f6ed; --rojo: #c0362c; --acento: #2f5bd3; --estrella: #d99a00;
+    --barra: #c9d5f5; --vela-sube: #0ecb81; --vela-baja: #f6465d;
+    --ma7: #F0B90B; --ma25: #EA4CB9; --ma99: #A98DFF;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fondo: #12151b; --tarjeta: #1b2029; --texto: #e7eaf0; --suave: #9aa5b5; --borde: #2c3340;
+      --verde: #3ccf7f; --verde-fondo: #173326; --rojo: #f0776c; --acento: #7d9cf0; --estrella: #f1c232;
+      --barra: #34446e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fondo); color: var(--texto);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 32px 0 8px; }
+  .sub { color: var(--suave); margin: 0 0 8px; }
+  .nota { color: var(--suave); font-size: .9rem; }
+  .vacio { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; padding: 18px; }
+  .tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+  .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; padding: 14px; }
+  .tarjeta.llego { border-color: var(--verde); background: var(--verde-fondo); }
+  .cabeza { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .moneda { font-weight: 700; font-size: 1.15rem; }
+  .moneda a { color: inherit; text-decoration: none; }
+  .moneda a:hover { text-decoration: underline; }
+  .chip { font-size: .75rem; border: 1px solid var(--borde); border-radius: 999px; padding: 0 8px; color: var(--suave); }
+  .estrella { color: var(--estrella); }
+  .datos { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin-top: 10px; font-size: .92rem; }
+  .datos dt { color: var(--suave); }
+  .datos dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .sube { color: var(--verde); }
+  .baja { color: var(--rojo); }
+  .tabla { overflow-x: auto; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--borde); text-align: left; white-space: nowrap; }
+  th { color: var(--suave); font-weight: 600; font-size: .82rem; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: 0; }
+  tr.llego td { background: var(--verde-fondo); }
+  .barra { display: inline-block; height: 8px; background: var(--barra); border-radius: 4px; vertical-align: middle; margin-right: 6px; }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; color: var(--acento); }
+  .resumen { margin: 8px 0; }
+  a { color: var(--acento); }
+  footer { margin-top: 40px; color: var(--suave); font-size: .85rem; }
+  .grafico-mini { height: 170px; margin-top: 10px; cursor: zoom-in; border-radius: 6px; overflow: hidden; }
+  .grafico-mini .aviso, .v-grafico .aviso { color: var(--suave); font-size: .85rem; padding: 12px; }
+  tr.abre { cursor: pointer; }
+  tr.abre:hover td { background: color-mix(in srgb, var(--acento) 8%, transparent); }
+  .visor { position: fixed; inset: 0; z-index: 10; background: var(--fondo); display: flex; flex-direction: column; }
+  .visor[hidden] { display: none; }
+  .visor-cabeza { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between;
+                  padding: 10px 16px; border-bottom: 1px solid var(--borde); }
+  .visor-cabeza strong { font-size: 1.1rem; }
+  .botones { display: flex; flex-wrap: wrap; gap: 6px; }
+  .botones button, .botones a { font: inherit; font-size: .88rem; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+                                border: 1px solid var(--borde); background: var(--tarjeta); color: var(--texto); text-decoration: none; }
+  .leyenda { padding: 6px 16px 0; font-size: .85rem; color: var(--suave); font-variant-numeric: tabular-nums; min-height: 1.6em; }
+  .leyenda b { color: var(--texto); font-weight: 600; }
+  .v-grafico { flex: 1; min-height: 0; margin: 4px 8px; }
+  .v-pie { padding: 4px 16px 10px; font-size: .82rem; color: var(--suave); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Red-Neuronal-Momentos</h1>
+  <p class="sub">Monedas de Momento-A y Momento-B que, según la red, pueden llegar a +50 % en los 10 días siguientes.</p>
+
+  <section id="hoy"><p class="nota">Cargando…</p></section>
+
+  <h2>Seguimiento de la red</h2>
+  <p class="nota">Las monedas que mostró la red cada día. El resultado se mide desde el precio de las 19:30 (hora Lima)
+    hasta 10 días después; si llegó a +50 %, la fila se pinta de verde.</p>
+  <div id="resumen-seguimiento" class="resumen"></div>
+  <div id="seguimiento"></div>
+
+  <h2>Cómo decide</h2>
+  <div id="como"></div>
+
+  <footer>Precios de Binance pedidos desde tu navegador. Esto es una herramienta de filtrado, no una recomendación de inversión.</footer>
+</main>
+
+<div id="visor" class="visor" hidden role="dialog" aria-modal="true" aria-labelledby="v-titulo">
+  <div class="visor-cabeza">
+    <div><strong id="v-titulo"></strong> <span id="v-sub" class="nota"></span></div>
+    <div class="botones">
+      <button id="v-ant" title="Moneda anterior (←)">←</button><button id="v-sig" title="Moneda siguiente (→)">→</button>
+      <button id="v-menos" title="Alejar (-)">−</button><button id="v-mas" title="Acercar (+)">+</button>
+      <button id="v-todo" title="Ver todo el historial (0)">Todo el historial</button>
+      <button id="v-dia" title="Volver al día de la lista">Día de la lista</button>
+      <a id="v-binance" target="_blank" rel="noopener">Binance</a>
+      <button id="v-cerrar" title="Cerrar (Esc)">✕</button>
+    </div>
+  </div>
+  <div id="v-leyenda" class="leyenda"></div>
+  <div id="v-grafico" class="v-grafico"></div>
+  <div id="v-pie" class="v-pie"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js" integrity="sha384-stKllnUqA9AD0gsKCuUtf5XlqAW7PwIgDagoNsTWkjkBmJ/GZ/uHTgEBxdLV2VSK" crossorigin="anonymous"></script>
+
+<script>
+"use strict";
+const DIA = 86400000, PASO = 1800000, VENTANA = 10;
+const URLS = {
+  spot: ["https://api.binance.com/api/v3", "https://data-api.binance.vision/api/v3"],
+  futures: ["https://fapi.binance.com/fapi/v1"],
+};
+const NOMBRE_LISTA = {"momento-a": "Momento-A", "momento-b": "Momento-B"};
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const fecha = (iso) => new Date(iso + "T12:00:00Z").toLocaleDateString("es-PE", {day: "numeric", month: "long", timeZone: "UTC"});
+const horaLima = (iso) => new Date(iso).toLocaleString("es-PE", {day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Lima"});
+const coma = (texto) => texto.replace(".", ",");
+const pct = (v) => v == null || isNaN(v) ? "—" : (v > 0 ? "+" : "") + coma(v.toFixed(1)) + " %";
+const clase = (v) => v == null || isNaN(v) ? "" : v >= 0 ? "sube" : "baja";
+const precio = (v) => v == null || isNaN(v) ? "—" : coma(v >= 1000 ? v.toFixed(2) : String(Number(v.toPrecision(5))));
+const puntos = (p) => coma((p * 100).toFixed(0)) + " %";
+
+// Las 19:30 en Lima (00:30 UTC) tras el cierre de la vela del día de la lista (abre el día siguiente a las 00:00 UTC).
+const referenciaMs = (dia) => Date.parse(dia + "T00:00:00Z") + 2 * DIA + PASO;
+
+function enlace(m) {
+  const base = m.simbolo.replace(/USDT$/, "");
+  return m.mercado === "futures" ? `https://www.binance.com/es/futures/${m.simbolo}`
+                                 : `https://www.binance.com/es/trade/${base}_USDT?type=spot`;
+}
+
+async function pedir(mercado, ruta) {
+  for (const base of URLS[mercado] || []) {
+    try {
+      const r = await fetch(base + ruta, {cache: "no-store"});
+      if (r.ok) return await r.json();
+    } catch (e) { /* siguiente dirección */ }
+  }
+  return null;
+}
+
+// ---------- Gráficos: velas 1D de Binance (abren a las 00:00 UTC), con todo el historial del par ----------
+const MEDIAS = [7, 25, 99];
+const LIMA = -5 * 3600000;  // los gráficos se ven en hora Lima, como Binance en Perú
+const PAGINA = 1000;        // velas por petición (el máximo de spot)
+const MAX_PAGINAS = 20;     // 20 000 velas diarias: más que el historial de cualquier par
+const historiales = new Map();
+
+// Todo el historial de velas 1D: la página más reciente y, hacia atrás, hasta la primera vela que tiene Binance.
+function historial(m) {
+  const clave = m.mercado + ":" + m.simbolo;
+  if (!historiales.has(clave)) {
+    historiales.set(clave, (async () => {
+      let filas = [], fin = null;
+      for (let n = 0; n < MAX_PAGINAS; n++) {
+        const pagina = await pedir(m.mercado, `/klines?symbol=${m.simbolo}&interval=1d&limit=${PAGINA}` + (fin ? `&endTime=${fin}` : ""));
+        if (!Array.isArray(pagina) || !pagina.length) break;
+        filas = pagina.concat(filas);
+        if (pagina.length < PAGINA) break;  // ya se llegó a la primera vela
+        fin = pagina[0][0] - 1;
+      }
+      if (!filas.length) historiales.delete(clave);  // se reintenta la próxima vez
+      return filas.map((f) => [f[0], +f[1], +f[2], +f[3], +f[4], +f[7]]);  // apertura, o, h, l, c, volumen USDT
+    })());
+  }
+  return historiales.get(clave);
+}
+
+function sma(valores, n) {
+  const r = new Array(valores.length).fill(null);
+  let suma = 0;
+  for (let i = 0; i < valores.length; i++) {
+    suma += valores[i];
+    if (i >= n) suma -= valores[i - n];
+    if (i >= n - 1) r[i] = suma / n;
+  }
+  return r;
+}
+
+function colores() {
+  const estilo = getComputedStyle(document.documentElement);
+  const v = (n) => estilo.getPropertyValue(n).trim();
+  return {fondo: v("--tarjeta"), texto: v("--suave"), rejilla: v("--borde"), sube: v("--vela-sube"), baja: v("--vela-baja"),
+          medias: [v("--ma7"), v("--ma25"), v("--ma99")], verde: v("--verde"), acento: v("--acento")};
+}
+
+const decimales = (v) => !v ? 2 : Math.min(10, Math.max(2, 4 - Math.floor(Math.log10(Math.abs(v)))));
+const tiempo = (ms) => Math.floor((ms + LIMA) / 1000);
+const diaVela = (ms) => new Date(ms + LIMA).toLocaleDateString("es-PE", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"});
+
+// ``ref``: precio de las 19:30 (línea discontinua) y su +50 % (punteada). La flecha marca la vela del día de la lista.
+function dibujar(el, filas, dia, ref, grande) {
+  const c = colores();
+  const d = decimales(filas[filas.length - 1][4]);
+  const chart = LightweightCharts.createChart(el, {
+    autoSize: true, localization: {locale: "es-ES", priceFormatter: (p) => coma(p.toFixed(d))},
+    layout: {background: {type: "solid", color: c.fondo}, textColor: c.texto, fontSize: grande ? 12 : 10, attributionLogo: false},
+    grid: {vertLines: {color: c.rejilla}, horzLines: {color: c.rejilla}},
+    rightPriceScale: {borderColor: c.rejilla, scaleMargins: grande ? {top: 0.08, bottom: 0.22} : {top: 0.1, bottom: 0.06}},
+    timeScale: {borderColor: c.rejilla, rightOffset: grande ? 6 : 2, minBarSpacing: grande ? 0.05 : 0.5, fixLeftEdge: !grande},
+    crosshair: grande ? {mode: LightweightCharts.CrosshairMode.Normal}
+      : {vertLine: {visible: false, labelVisible: false}, horzLine: {visible: false, labelVisible: false}},
+    handleScroll: grande, handleScale: grande,
+  });
+  const formato = {type: "price", precision: d, minMove: Math.pow(10, -d)};
+  const velas = filas.map((f) => ({time: tiempo(f[0]), open: f[1], high: f[2], low: f[3], close: f[4]}));
+  const serie = chart.addCandlestickSeries({priceFormat: formato, upColor: c.sube, downColor: c.baja,
+                                           wickUpColor: c.sube, wickDownColor: c.baja, borderVisible: false});
+  serie.setData(velas);
+  const cierres = filas.map((f) => f[4]);
+  const medias = MEDIAS.map((n, i) => {
+    const valores = sma(cierres, n);
+    const linea = chart.addLineSeries({color: c.medias[i], lineWidth: grande ? 2 : 1, priceLineVisible: false,
+                                       lastValueVisible: false, crosshairMarkerVisible: false, priceFormat: formato});
+    linea.setData(valores.flatMap((v, j) => (v == null ? [] : [{time: velas[j].time, value: v}])));
+    return valores;
+  });
+  if (grande) {
+    const volumen = chart.addHistogramSeries({priceFormat: {type: "volume"}, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false});
+    chart.priceScale("vol").applyOptions({scaleMargins: {top: 0.82, bottom: 0}});
+    volumen.setData(filas.map((f, i) => ({time: velas[i].time, value: f[5], color: (f[4] >= f[1] ? c.sube : c.baja) + "66"})));
+  }
+  const apertura = Date.parse(dia + "T00:00:00Z") + DIA;  // la vela del día de la lista abre el día siguiente (UTC)
+  const indice = filas.findIndex((f) => f[0] === apertura);
+  if (indice >= 0) serie.setMarkers([{time: velas[indice].time, position: "aboveBar", color: c.acento, shape: "arrowDown", text: grande ? "Lista" : ""}]);
+  if (ref) {
+    serie.createPriceLine({price: ref, color: c.acento, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
+                           axisLabelVisible: grande, title: grande ? "19:30" : ""});
+    serie.createPriceLine({price: ref * 1.5, color: c.verde, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted,
+                           axisLabelVisible: grande, title: grande ? "+50 %" : ""});
+  }
+  const enfoque = () => {
+    const n = velas.length, visibles = grande ? 120 : 60;
+    const desde = Math.max(0, Math.min(indice >= 0 ? indice - 15 : n, n - visibles));
+    chart.timeScale().setVisibleLogicalRange({from: desde, to: n - 1 + (grande ? 6 : 2)});
+  };
+  enfoque();
+  return {chart, serie, filas, velas, medias, enfoque};
+}
+
+async function miniGrafico(el, m, dia, ref) {
+  if (!window.LightweightCharts) { el.innerHTML = `<div class="aviso">No se pudo cargar la librería de gráficos.</div>`; return; }
+  const filas = await historial(m);
+  if (!filas.length) { el.innerHTML = `<div class="aviso">Binance no respondió: sin gráfico.</div>`; return; }
+  dibujar(el, filas, dia, ref, false);
+}
+
+// ---------- Visor a pantalla completa ----------
+const visor = {lista: [], i: 0, actual: null};
+const $ = (id) => document.getElementById(id);
+
+function leyenda(g, idx) {
+  const f = g.filas[idx];
+  if (!f) return;
+  const fila = (nombre, v, color) => `<span style="color:${color}">${nombre} <b>${precio(v)}</b></span>`;
+  const c = colores();
+  $("v-leyenda").innerHTML = `${diaVela(f[0])} · A <b>${precio(f[1])}</b> · Máx <b>${precio(f[2])}</b> · Mín <b>${precio(f[3])}</b>
+    · C <b>${precio(f[4])}</b> · <span class="${clase(f[4] / f[1] - 1)}">${pct((f[4] / f[1] - 1) * 100)}</span> · `
+    + MEDIAS.map((n, i) => fila(`MA(${n})`, g.medias[i][idx], c.medias[i])).join(" · ");
+}
+
+async function mostrarVisor() {
+  const {m, dia, ref} = visor.lista[visor.i];
+  $("v-titulo").textContent = m.moneda;
+  $("v-sub").textContent = `${m.mercado === "futures" ? "Futuros" : "Spot"} · ${m.simbolo} · lista del ${fecha(dia)} · velas 1D (abren a las 19:00 hora Lima)`;
+  $("v-binance").href = enlace(m);
+  $("v-ant").disabled = visor.i === 0;
+  $("v-sig").disabled = visor.i === visor.lista.length - 1;
+  const caja = $("v-grafico");
+  if (visor.actual) { visor.actual.chart.remove(); visor.actual = null; }
+  caja.innerHTML = `<div class="aviso">Cargando todo el historial…</div>`;
+  $("v-leyenda").textContent = "";
+  $("v-pie").textContent = "";
+  const pedido = visor.i;
+  const filas = window.LightweightCharts ? await historial(m) : [];
+  if (pedido !== visor.i || $("visor").hidden) return;  // se cambió de moneda o se cerró mientras cargaba
+  if (!filas.length) {
+    caja.innerHTML = `<div class="aviso">${window.LightweightCharts ? "Binance no respondió: sin gráfico." : "No se pudo cargar la librería de gráficos."}</div>`;
+    return;
+  }
+  caja.innerHTML = "";
+  const g = dibujar(caja, filas, dia, ref, true);
+  visor.actual = g;
+  leyenda(g, filas.length - 1);
+  g.chart.subscribeCrosshairMove((p) => {
+    const idx = p && p.logical != null ? Math.round(p.logical) : -1;
+    leyenda(g, idx >= 0 && idx < filas.length ? idx : filas.length - 1);
+  });
+  $("v-pie").textContent = `Historial completo: ${filas.length.toLocaleString("es-ES")} velas de 1D desde el ${diaVela(filas[0][0])}.`
+    + " Rueda o pellizco para acercar, arrastrar para moverse.";
+}
+
+function abrirVisor(lista, i) {
+  visor.lista = lista;
+  visor.i = i;
+  $("visor").hidden = false;
+  document.body.style.overflow = "hidden";
+  mostrarVisor();
+}
+
+function cerrarVisor() {
+  $("visor").hidden = true;
+  document.body.style.overflow = "";
+  if (visor.actual) { visor.actual.chart.remove(); visor.actual = null; }
+}
+
+function mover(paso) {
+  const i = visor.i + paso;
+  if (i >= 0 && i < visor.lista.length) { visor.i = i; mostrarVisor(); }
+}
+
+function zoom(factor) {
+  const g = visor.actual;
+  if (!g) return;
+  const r = g.chart.timeScale().getVisibleLogicalRange();
+  if (!r) return;
+  const ancho = Math.max(10, (r.to - r.from) * factor);
+  g.chart.timeScale().setVisibleLogicalRange({from: r.to - ancho, to: r.to});
+}
+
+$("v-cerrar").addEventListener("click", cerrarVisor);
+$("v-ant").addEventListener("click", () => mover(-1));
+$("v-sig").addEventListener("click", () => mover(1));
+$("v-mas").addEventListener("click", () => zoom(0.7));
+$("v-menos").addEventListener("click", () => zoom(1.45));
+$("v-todo").addEventListener("click", () => visor.actual && visor.actual.chart.timeScale().fitContent());
+$("v-dia").addEventListener("click", () => visor.actual && visor.actual.enfoque());
+document.addEventListener("keydown", (e) => {
+  if ($("visor").hidden) return;
+  const accion = {Escape: cerrarVisor, ArrowLeft: () => mover(-1), ArrowRight: () => mover(1), "+": () => zoom(0.7),
+                  "=": () => zoom(0.7), "-": () => zoom(1.45), "0": () => visor.actual && visor.actual.chart.timeScale().fitContent()}[e.key];
+  if (accion) { e.preventDefault(); accion(); }
+});
+
+// Las filas con ``data-i`` abren el visor con su lista de monedas.
+function filasQueAbren(contenedor, lista) {
+  contenedor.querySelectorAll("tr[data-i]").forEach((tr) => {
+    tr.classList.add("abre");
+    tr.addEventListener("click", (e) => {
+      if (!e.target.closest("a")) abrirVisor(lista, Number(tr.dataset.i));
+    });
+  });
+}
+
+// Máximo desde las 19:30, con la misma regla que las etiquetas: velas de 30 minutos durante 10 días.
+async function enVivo(dia, m) {
+  const inicio = referenciaMs(dia);
+  if (Date.now() < inicio) return null;
+  const velas = await pedir(m.mercado, `/klines?symbol=${m.simbolo}&interval=30m&startTime=${inicio}&limit=500`);
+  if (!Array.isArray(velas) || !velas.length || velas[0][0] !== inicio) return null;
+  const fin = inicio + VENTANA * DIA, ref = +velas[0][1];
+  let maximo = -Infinity, dias = null;
+  for (const v of velas) {
+    if (v[0] >= fin) break;
+    maximo = Math.max(maximo, +v[2]);
+    if (dias === null && +v[2] >= ref * 1.5) dias = Math.floor((v[0] - inicio) / DIA) + 1;
+  }
+  const actual = +velas[velas.length - 1][4];
+  return {ref, maximo, pctMax: (maximo / ref - 1) * 100, dias, actual, variacion: (actual / ref - 1) * 100,
+          terminado: Date.now() >= fin, diaActual: Math.min(VENTANA, Math.floor((Date.now() - inicio) / DIA) + 1)};
+}
+
+function resultadoTexto(r) {
+  if (!r) return "—";
+  if (r.dias) return `Llegó en ${r.dias} ${r.dias === 1 ? "día" : "días"}`;
+  if (r.terminado) return "No llegó";
+  return `Día ${r.diaActual} de ${VENTANA}`;
+}
+
+// Resultado de una moneda: el de datos/etiquetas.csv si ya terminó; si no, en vivo.
+async function resultado(datos, dia, m) {
+  const fijo = datos.resultados[`${dia}|${m.moneda}`];
+  if (fijo && (fijo.estado === "llego" || fijo.estado === "no_llego")) {
+    return {ref: +fijo.referencia, pctMax: fijo.pct_maximo === "" ? NaN : +fijo.pct_maximo,
+            dias: fijo.dias_hasta_50 ? +fijo.dias_hasta_50 : null, terminado: true};
+  }
+  return await enVivo(dia, m);
+}
+
+function tarjeta(datos, dia, m, r) {
+  const estrella = datos.estrellas.includes(`${dia}|${m.moneda}`) ? `<span class="estrella" title="Tiene tu estrella">★</span>` : "";
+  const listas = m.listas.map((l) => `<span class="chip">${esc(NOMBRE_LISTA[l] || l)}</span>`).join(" ");
+  const fila = (t, v, c = "") => `<dt>${t}</dt><dd class="${c}">${v}</dd>`;
+  return `<article class="tarjeta${r && r.dias ? " llego" : ""}">
+    <div class="cabeza"><span class="moneda"><a href="${enlace(m)}" target="_blank" rel="noopener">${esc(m.moneda)}</a></span>
+      ${estrella}<span class="chip">${m.mercado === "futures" ? "Futuros" : "Spot"}</span> ${listas}</div>
+    <dl class="datos">
+      ${fila("Puntuación de la red", puntos(m.puntuacion))}
+      ${fila("Precio a las 19:30", precio(r ? r.ref : m.precio))}
+      ${fila("Precio actual", precio(r && r.actual))}
+      ${fila("Variación", pct(r && r.variacion), clase(r && r.variacion))}
+      ${fila("Máximo desde las 19:30", pct(r && r.pctMax), clase(r && r.pctMax))}
+      ${fila("Rumbo al 50", resultadoTexto(r))}
+    </dl><div class="grafico-mini" title="Ampliar el gráfico"></div></article>`;
+}
+
+async function pintarHoy(datos) {
+  const caja = document.getElementById("hoy");
+  const hoy = datos.dias[0];
+  if (!hoy) {
+    caja.innerHTML = `<div class="vacio">${datos.modelo ? "Todavía no hay ninguna lista: la primera sale a las 19:30 (hora Lima)."
+      : "La red todavía no está entrenada. Cuando lo esté, su lista saldrá cada día a las 19:30 (hora Lima)."}</div>`;
+    return;
+  }
+  const mostradas = hoy.monedas.filter((m) => m.mostrar);
+  let html = `<h2>Lista del ${fecha(hoy.fecha)}</h2>
+    <p class="nota">Calculada el ${horaLima(hoy.hora)} (hora Lima) con ${hoy.monedas.length} candidatas de las listas de ese día.</p>`;
+  if (!mostradas.length) {
+    html += `<div class="vacio">En esta lista la red no muestra ninguna moneda: ninguna de las ${hoy.monedas.length} candidatas pasó el umbral.</div>`;
+  } else {
+    html += `<div class="tarjetas" id="tarjetas-hoy">${mostradas.map((m) => tarjeta(datos, hoy.fecha, m, null)).join("")}</div>`;
+  }
+  html += `<details><summary>Ver todas las candidatas del día, ordenadas por puntuación (pulsa una para ver su gráfico)</summary>
+    <div class="tabla" id="tabla-candidatas"><table><thead><tr><th>#</th><th>Moneda</th><th>Listas</th><th>Puntuación</th><th>La muestra</th></tr></thead><tbody>
+    ${hoy.monedas.map((m, i) => `<tr data-i="${i}"${m.mostrar ? ' class="llego"' : ""}><td>${i + 1}</td><td>${esc(m.moneda)}
+      ${datos.estrellas.includes(`${hoy.fecha}|${m.moneda}`) ? '<span class="estrella">★</span>' : ""}</td>
+      <td>${m.listas.map((l) => esc(NOMBRE_LISTA[l] || l)).join(", ")}</td>
+      <td><span class="barra" style="width:${Math.round(m.puntuacion * 80)}px"></span>${puntos(m.puntuacion)}</td>
+      <td>${m.mostrar ? "Sí" : ""}</td></tr>`).join("")}
+    </tbody></table></div></details>`;
+  caja.innerHTML = html;
+  filasQueAbren($("tabla-candidatas"), hoy.monedas.map((m) => ({m, dia: hoy.fecha, ref: null})));
+  if (mostradas.length) {
+    // Primero las tarjetas sin precios en vivo; cuando llegan, otra vez y con su gráfico.
+    const pintar = (vivos, conGrafico) => {
+      const contenedor = $("tarjetas-hoy");
+      contenedor.innerHTML = mostradas.map((m, i) => tarjeta(datos, hoy.fecha, m, vivos[i])).join("");
+      if (!conGrafico) return;
+      const lista = mostradas.map((m, i) => ({m, dia: hoy.fecha, ref: vivos[i] ? vivos[i].ref : m.precio}));
+      contenedor.querySelectorAll(".grafico-mini").forEach((el, i) => {
+        miniGrafico(el, mostradas[i], hoy.fecha, lista[i].ref);
+        el.addEventListener("click", () => abrirVisor(lista, i));
+      });
+    };
+    pintar(mostradas.map(() => null), false);
+    pintar(await Promise.all(mostradas.map((m) => enVivo(hoy.fecha, m))), true);
+  }
+}
+
+async function pintarSeguimiento(datos) {
+  const filas = [];
+  for (const d of datos.dias) for (const m of d.monedas) if (m.mostrar) filas.push({dia: d.fecha, m});
+  const caja = document.getElementById("seguimiento");
+  if (!filas.length) {
+    caja.innerHTML = `<div class="vacio">Todavía no hay monedas mostradas por la red.</div>`;
+    return;
+  }
+  const resultados = await Promise.all(filas.map((f) => resultado(datos, f.dia, f.m)));
+  caja.innerHTML = `<div class="tabla"><table><thead><tr><th>Día</th><th>Moneda</th><th class="n">Puntuación</th>
+    <th class="n">Precio 19:30</th><th class="n">Máximo</th><th>Resultado</th></tr></thead><tbody>
+    ${filas.map((f, i) => {
+      const r = resultados[i];
+      const estrella = datos.estrellas.includes(`${f.dia}|${f.m.moneda}`) ? ' <span class="estrella">★</span>' : "";
+      return `<tr data-i="${i}"${r && r.dias ? ' class="llego"' : ""}><td>${fecha(f.dia)}</td>
+        <td><a href="${enlace(f.m)}" target="_blank" rel="noopener">${esc(f.m.moneda)}</a>${estrella}</td>
+        <td class="n">${puntos(f.m.puntuacion)}</td><td class="n">${precio(r ? r.ref : f.m.precio)}</td>
+        <td class="n ${clase(r && r.pctMax)}">${pct(r && r.pctMax)}</td><td>${resultadoTexto(r)}</td></tr>`;
+    }).join("")}</tbody></table></div>`;
+  filasQueAbren(caja, filas.map((f, i) => ({m: f.m, dia: f.dia, ref: resultados[i] ? resultados[i].ref : f.m.precio})));
+
+  // Resumen: aciertos de la red frente a elegir al azar entre las candidatas de esos mismos días.
+  const terminadas = resultados.filter((r) => r && (r.dias || r.terminado));
+  const llegaron = terminadas.filter((r) => r.dias).length;
+  const dias = new Set(filas.map((f) => f.dia));
+  let todas = 0, todasLlegaron = 0;
+  for (const d of datos.dias) {
+    if (!dias.has(d.fecha)) continue;
+    for (const m of d.monedas) {
+      const r = datos.resultados[`${d.fecha}|${m.moneda}`];
+      if (r && (r.estado === "llego" || r.estado === "no_llego")) { todas++; if (r.estado === "llego") todasLlegaron++; }
+    }
+  }
+  document.getElementById("resumen-seguimiento").innerHTML = terminadas.length
+    ? `Monedas mostradas con resultado: ${terminadas.length}. <strong>Llegaron a +50 %: ${llegaron}
+       (${coma((llegaron / terminadas.length * 100).toFixed(0))} %)</strong>.` +
+      (todas ? ` Entre todas las candidatas de esos días llegó el ${coma((todasLlegaron / todas * 100).toFixed(0))} %.` : "")
+    : "";
+}
+
+function pintarComo(datos) {
+  const m = datos.modelo;
+  const informe = "https://github.com/LuisP11127/Red-Neuronal-Momentos/blob/main/modelo/INFORME.md";
+  if (!m) { document.getElementById("como").innerHTML = `<p class="nota">La red todavía no está entrenada.</p>`; return; }
+  const parte = (e) => e && e.umbral && e.umbral.mostradas
+    ? `mostró ${e.umbral.mostradas} y llegaron ${e.umbral.llegaron} (${coma((e.umbral.precision * 100).toFixed(0))} %; al azar, ${coma((e.base * 100).toFixed(0))} %)`
+    : "no mostró ninguna";
+  document.getElementById("como").innerHTML = `
+    <p>Cada día a las 19:30 (hora Lima) la red puntúa las monedas de Momento-A y Momento-B del día con señales de ese
+      momento: velas, medias, volumen, explosiones anteriores, en qué listas salió y, en futuros, el libro de órdenes,
+      el interés abierto y las relaciones long/short. Muestra una moneda solo si su puntuación pasa el umbral
+      ${m.umbral == null ? "(ahora no hay umbral: ninguno llegó a 3 de cada 10 en las pruebas, así que no muestra ninguna)"
+        : `(${puntos(m.umbral)}): el más bajo con el que, en las pruebas con días pasados, al menos 3 de cada 10 llegaron a +50 %`}.</p>
+    <p class="nota">En la validación (${m.tramos ? `${fecha(m.tramos.validacion[0])} de ${m.tramos.validacion[0].slice(0, 4)} a ${fecha(m.tramos.validacion[1])} de ${m.tramos.validacion[1].slice(0, 4)}` : ""})
+      ${parte(m.validacion)}. Con tus listas reales ${parte(m.prueba)}.
+      <a href="${informe}" target="_blank" rel="noopener">Informe completo</a>.</p>`;
+}
+
+fetch("datos.json", {cache: "no-store"}).then((r) => r.json()).then((datos) => {
+  pintarComo(datos);
+  pintarHoy(datos);
+  pintarSeguimiento(datos);
+}).catch(() => {
+  document.getElementById("hoy").innerHTML = `<div class="vacio">No se pudieron cargar los datos de la red.</div>`;
+});
+</script>
+</body>
+</html>
