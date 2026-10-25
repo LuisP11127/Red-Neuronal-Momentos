@@ -31,7 +31,7 @@ from .fechas import UN_DIA, dia_de_ms, ms
 
 VISION = "https://data.binance.vision/data"
 USER_AGENT = "Mozilla/5.0 (compatible; Red-Neuronal-Momentos)"
-DURACION = {"30m": 30 * 60_000, "1h": 3_600_000, "1d": 86_400_000}  # milisegundos
+DURACION = {"15m": 15 * 60_000, "30m": 30 * 60_000, "1h": 3_600_000, "1d": 86_400_000}  # milisegundos
 
 
 @dataclass(frozen=True)
