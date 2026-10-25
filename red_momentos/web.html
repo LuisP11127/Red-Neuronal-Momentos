@@ -70,6 +70,12 @@
   .leyenda b { color: var(--texto); font-weight: 600; }
   .v-grafico { flex: 1; min-height: 0; margin: 4px 8px; }
   .v-pie { padding: 4px 16px 10px; font-size: .82rem; color: var(--suave); }
+  details.dia { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; margin: 8px 0 0; }
+  details.dia > summary { padding: 10px 14px; color: var(--texto); }
+  details.dia > .contenido { padding: 0 14px 12px; }
+  details.dia .nota { margin: 0; }
+  .tabla.plana { border: 0; border-radius: 0; background: transparent; }
+  tr.mostrada td:first-child { box-shadow: inset 3px 0 0 var(--acento); }
 </style>
 </head>
 <body>
@@ -80,10 +86,16 @@
   <section id="hoy"><p class="nota">Cargando…</p></section>
 
   <h2>Seguimiento de la red</h2>
-  <p class="nota">Las monedas que mostró la red cada día. El resultado se mide desde el precio de las 19:30 (hora Lima)
-    hasta 10 días después; si llegó a +50 %, la fila se pinta de verde.</p>
+  <p class="nota">Un apartado por día con las monedas que mostró la red. El resultado se mide desde el precio de las 19:30
+    (hora Lima) hasta 10 días después; si llegó a +50 %, la fila se pinta de verde.</p>
   <div id="resumen-seguimiento" class="resumen"></div>
   <div id="seguimiento"></div>
+
+  <h2 id="candidatas-titulo">Candidatas por día</h2>
+  <p class="nota">Todas las monedas de Momento-A y Momento-B de cada día, ordenadas por la puntuación de la red; las que
+    mostró llevan una marca a la izquierda. El máximo y el resultado se miden igual que arriba y se actualizan cada día a
+    las 19:30. Pulsa una moneda para ver su gráfico.</p>
+  <div id="candidatas"></div>
 
   <h2>Cómo decide</h2>
   <div id="como"></div>
@@ -375,15 +387,38 @@ function resultadoTexto(r) {
   return `Día ${r.diaActual} de ${VENTANA}`;
 }
 
-// Resultado de una moneda: el de datos/etiquetas.csv si ya terminó; si no, en vivo.
-async function resultado(datos, dia, m) {
-  const fijo = datos.resultados[`${dia}|${m.moneda}`];
-  if (fijo && (fijo.estado === "llego" || fijo.estado === "no_llego")) {
-    return {ref: +fijo.referencia, pctMax: fijo.pct_maximo === "" ? NaN : +fijo.pct_maximo,
-            dias: fijo.dias_hasta_50 ? +fijo.dias_hasta_50 : null, terminado: true};
-  }
-  return await enVivo(dia, m);
+// Resultado de datos/etiquetas.csv (se calcula cada día a las 19:30): el final o, si aún no terminó, hasta dónde va.
+function resultadoGuardado(datos, dia, m) {
+  const r = datos.resultados[`${dia}|${m.moneda}`];
+  if (!r || !r.referencia || (r.estado !== "llego" && r.estado !== "no_llego" && r.estado !== "pendiente")) return null;
+  return {ref: +r.referencia, pctMax: r.pct_maximo === "" ? NaN : +r.pct_maximo,
+          dias: r.dias_hasta_50 ? +r.dias_hasta_50 : null, terminado: r.estado === "no_llego",
+          final: r.estado !== "pendiente", diaActual: Math.min(VENTANA, (+r.dias_vistos || 0) + 1)};
 }
+
+// Resultado de una moneda mostrada: el guardado si ya terminó; si no, en vivo (y si Binance no responde, el guardado).
+async function resultado(datos, dia, m) {
+  const guardado = resultadoGuardado(datos, dia, m);
+  if (guardado && guardado.final) return guardado;
+  return (await enVivo(dia, m)) || guardado;
+}
+
+// Un apartado por día (el más reciente abierto); su contenido se dibuja la primera vez que se abre.
+function apartadosPorDia(caja, dias, resumen, contenido) {
+  caja.innerHTML = dias.map((d, i) => `<details class="dia" data-i="${i}"${i === 0 ? " open" : ""}>
+    <summary>${resumen(d)}</summary><div class="contenido"></div></details>`).join("");
+  caja.querySelectorAll("details.dia").forEach((el) => {
+    const pintar = () => {
+      if (!el.open || el.dataset.pintado) return;
+      el.dataset.pintado = "1";
+      contenido(dias[Number(el.dataset.i)], el.querySelector(".contenido"));
+    };
+    el.addEventListener("toggle", pintar);
+    pintar();
+  });
+}
+
+const conEstrella = (datos, dia, m) => datos.estrellas.includes(`${dia}|${m.moneda}`) ? ' <span class="estrella" title="Tiene tu estrella">★</span>' : "";
 
 function tarjeta(datos, dia, m, r) {
   const estrella = datos.estrellas.includes(`${dia}|${m.moneda}`) ? `<span class="estrella" title="Tiene tu estrella">★</span>` : "";
@@ -418,16 +453,8 @@ async function pintarHoy(datos) {
   } else {
     html += `<div class="tarjetas" id="tarjetas-hoy">${mostradas.map((m) => tarjeta(datos, hoy.fecha, m, null)).join("")}</div>`;
   }
-  html += `<details><summary>Ver todas las candidatas del día, ordenadas por puntuación (pulsa una para ver su gráfico)</summary>
-    <div class="tabla" id="tabla-candidatas"><table><thead><tr><th>#</th><th>Moneda</th><th>Listas</th><th>Puntuación</th><th>La muestra</th></tr></thead><tbody>
-    ${hoy.monedas.map((m, i) => `<tr data-i="${i}"${m.mostrar ? ' class="llego"' : ""}><td>${i + 1}</td><td>${esc(m.moneda)}
-      ${datos.estrellas.includes(`${hoy.fecha}|${m.moneda}`) ? '<span class="estrella">★</span>' : ""}</td>
-      <td>${m.listas.map((l) => esc(NOMBRE_LISTA[l] || l)).join(", ")}</td>
-      <td><span class="barra" style="width:${Math.round(m.puntuacion * 80)}px"></span>${puntos(m.puntuacion)}</td>
-      <td>${m.mostrar ? "Sí" : ""}</td></tr>`).join("")}
-    </tbody></table></div></details>`;
+  html += `<p class="nota"><a href="#candidatas-titulo">Ver todas las candidatas de este día y de los anteriores</a></p>`;
   caja.innerHTML = html;
-  filasQueAbren($("tabla-candidatas"), hoy.monedas.map((m) => ({m, dia: hoy.fecha, ref: null})));
   if (mostradas.length) {
     // Primero las tarjetas sin precios en vivo; cuando llegan, otra vez y con su gráfico.
     const pintar = (vivos, conGrafico) => {
@@ -445,44 +472,85 @@ async function pintarHoy(datos) {
   }
 }
 
-async function pintarSeguimiento(datos) {
-  const filas = [];
-  for (const d of datos.dias) for (const m of d.monedas) if (m.mostrar) filas.push({dia: d.fecha, m});
-  const caja = document.getElementById("seguimiento");
-  if (!filas.length) {
-    caja.innerHTML = `<div class="vacio">Todavía no hay monedas mostradas por la red.</div>`;
+function pintarSeguimiento(datos) {
+  const caja = $("seguimiento");
+  if (!datos.dias.length) {
+    caja.innerHTML = `<div class="vacio">Todavía no hay listas de la red.</div>`;
     return;
   }
-  const resultados = await Promise.all(filas.map((f) => resultado(datos, f.dia, f.m)));
-  caja.innerHTML = `<div class="tabla"><table><thead><tr><th>Día</th><th>Moneda</th><th class="n">Puntuación</th>
-    <th class="n">Precio 19:30</th><th class="n">Máximo</th><th>Resultado</th></tr></thead><tbody>
-    ${filas.map((f, i) => {
-      const r = resultados[i];
-      const estrella = datos.estrellas.includes(`${f.dia}|${f.m.moneda}`) ? ' <span class="estrella">★</span>' : "";
-      return `<tr data-i="${i}"${r && r.dias ? ' class="llego"' : ""}><td>${fecha(f.dia)}</td>
-        <td><a href="${enlace(f.m)}" target="_blank" rel="noopener">${esc(f.m.moneda)}</a>${estrella}</td>
-        <td class="n">${puntos(f.m.puntuacion)}</td><td class="n">${precio(r ? r.ref : f.m.precio)}</td>
-        <td class="n ${clase(r && r.pctMax)}">${pct(r && r.pctMax)}</td><td>${resultadoTexto(r)}</td></tr>`;
-    }).join("")}</tbody></table></div>`;
-  filasQueAbren(caja, filas.map((f, i) => ({m: f.m, dia: f.dia, ref: resultados[i] ? resultados[i].ref : f.m.precio})));
+  const mostradasDe = (d) => d.monedas.filter((m) => m.mostrar);
+  apartadosPorDia(caja, datos.dias, (d) => {
+    const mostradas = mostradasDe(d);
+    if (!mostradas.length) return `<b>${fecha(d.fecha)}</b> · no mostró ninguna de las ${d.monedas.length} candidatas`;
+    const llegaron = mostradas.filter((m) => (resultadoGuardado(datos, d.fecha, m) || {}).dias).length;
+    return `<b>${fecha(d.fecha)}</b> · mostró ${mostradas.length} de ${d.monedas.length} candidatas`
+      + (llegaron ? ` · llegaron a +50 %: ${llegaron}` : "");
+  }, async (d, el) => {
+    const mostradas = mostradasDe(d);
+    if (!mostradas.length) {
+      const mejor = d.monedas[0];
+      el.innerHTML = `<p class="nota">Ninguna candidata pasó el umbral${d.umbral != null ? ` (${puntos(d.umbral)})` : ""}.`
+        + (mejor ? ` La mejor puntuada fue ${esc(mejor.moneda)}, con ${puntos(mejor.puntuacion)}.` : "") + `</p>`;
+      return;
+    }
+    el.innerHTML = `<p class="nota">Cargando…</p>`;
+    const resultados = await Promise.all(mostradas.map((m) => resultado(datos, d.fecha, m)));
+    el.innerHTML = `<div class="tabla plana"><table><thead><tr><th>Moneda</th><th class="n">Puntuación</th>
+      <th class="n">Precio 19:30</th><th class="n">Máximo</th><th>Resultado</th></tr></thead><tbody>
+      ${mostradas.map((m, i) => {
+        const r = resultados[i];
+        return `<tr data-i="${i}"${r && r.dias ? ' class="llego"' : ""}>
+          <td><a href="${enlace(m)}" target="_blank" rel="noopener">${esc(m.moneda)}</a>${conEstrella(datos, d.fecha, m)}</td>
+          <td class="n">${puntos(m.puntuacion)}</td><td class="n">${precio(r ? r.ref : m.precio)}</td>
+          <td class="n ${clase(r && r.pctMax)}">${pct(r && r.pctMax)}</td><td>${resultadoTexto(r)}</td></tr>`;
+      }).join("")}</tbody></table></div>`;
+    filasQueAbren(el, mostradas.map((m, i) => ({m, dia: d.fecha, ref: resultados[i] ? resultados[i].ref : m.precio})));
+  });
 
-  // Resumen: aciertos de la red frente a elegir al azar entre las candidatas de esos mismos días.
-  const terminadas = resultados.filter((r) => r && (r.dias || r.terminado));
-  const llegaron = terminadas.filter((r) => r.dias).length;
-  const dias = new Set(filas.map((f) => f.dia));
-  let todas = 0, todasLlegaron = 0;
+  // Resumen: aciertos de la red frente a todas las candidatas de esos mismos días (solo resultados terminados).
+  let mostradas = 0, llegaron = 0, todas = 0, todasLlegaron = 0;
   for (const d of datos.dias) {
-    if (!dias.has(d.fecha)) continue;
+    if (!mostradasDe(d).length) continue;
     for (const m of d.monedas) {
-      const r = datos.resultados[`${d.fecha}|${m.moneda}`];
-      if (r && (r.estado === "llego" || r.estado === "no_llego")) { todas++; if (r.estado === "llego") todasLlegaron++; }
+      const r = resultadoGuardado(datos, d.fecha, m);
+      if (!r || !r.final) continue;
+      todas++; if (r.dias) todasLlegaron++;
+      if (m.mostrar) { mostradas++; if (r.dias) llegaron++; }
     }
   }
-  document.getElementById("resumen-seguimiento").innerHTML = terminadas.length
-    ? `Monedas mostradas con resultado: ${terminadas.length}. <strong>Llegaron a +50 %: ${llegaron}
-       (${coma((llegaron / terminadas.length * 100).toFixed(0))} %)</strong>.` +
-      (todas ? ` Entre todas las candidatas de esos días llegó el ${coma((todasLlegaron / todas * 100).toFixed(0))} %.` : "")
+  $("resumen-seguimiento").innerHTML = mostradas
+    ? `Monedas mostradas con resultado: ${mostradas}. <strong>Llegaron a +50 %: ${llegaron}
+       (${coma((llegaron / mostradas * 100).toFixed(0))} %)</strong>.`
+      + ` Entre todas las candidatas de esos días llegó el ${coma((todasLlegaron / todas * 100).toFixed(0))} %.`
     : "";
+}
+
+function pintarCandidatas(datos) {
+  const caja = $("candidatas");
+  if (!datos.dias.length) {
+    caja.innerHTML = `<div class="vacio">Todavía no hay listas de la red.</div>`;
+    return;
+  }
+  apartadosPorDia(caja, datos.dias, (d) => {
+    const finales = d.monedas.map((m) => resultadoGuardado(datos, d.fecha, m)).filter((r) => r && r.final);
+    const llegaron = finales.filter((r) => r.dias).length;
+    return `<b>${fecha(d.fecha)}</b> · ${d.monedas.length} candidatas · la red mostró ${d.monedas.filter((m) => m.mostrar).length}`
+      + (finales.length ? ` · llegaron a +50 %: ${llegaron} de ${finales.length} con resultado` : "");
+  }, (d, el) => {
+    const resultados = d.monedas.map((m) => resultadoGuardado(datos, d.fecha, m));
+    el.innerHTML = `<div class="tabla plana"><table><thead><tr><th>#</th><th>Moneda</th><th>Listas</th><th>Puntuación</th>
+      <th>La muestra</th><th class="n">Máximo</th><th>Resultado</th></tr></thead><tbody>
+      ${d.monedas.map((m, i) => {
+        const r = resultados[i];
+        const clases = [m.mostrar ? "mostrada" : "", r && r.dias ? "llego" : ""].filter(Boolean).join(" ");
+        return `<tr data-i="${i}"${clases ? ` class="${clases}"` : ""}><td>${i + 1}</td><td>${esc(m.moneda)}${conEstrella(datos, d.fecha, m)}</td>
+          <td>${m.listas.map((l) => esc(NOMBRE_LISTA[l] || l)).join(", ")}</td>
+          <td><span class="barra" style="width:${Math.round(m.puntuacion * 80)}px"></span>${puntos(m.puntuacion)}</td>
+          <td>${m.mostrar ? "Sí" : ""}</td><td class="n ${clase(r && r.pctMax)}">${pct(r && r.pctMax)}</td>
+          <td>${resultadoTexto(r)}</td></tr>`;
+      }).join("")}</tbody></table></div>`;
+    filasQueAbren(el, d.monedas.map((m, i) => ({m, dia: d.fecha, ref: resultados[i] ? resultados[i].ref : null})));
+  });
 }
 
 function pintarComo(datos) {
@@ -507,6 +575,7 @@ fetch("datos.json", {cache: "no-store"}).then((r) => r.json()).then((datos) => {
   pintarComo(datos);
   pintarHoy(datos);
   pintarSeguimiento(datos);
+  pintarCandidatas(datos);
 }).catch(() => {
   document.getElementById("hoy").innerHTML = `<div class="vacio">No se pudieron cargar los datos de la red.</div>`;
 });

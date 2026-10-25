@@ -150,9 +150,13 @@ primera.
 
 - **Lista del día:** solo las monedas que pasan el umbral, cada una con su puntuación, el precio de las
   19:30, el precio actual, el máximo desde las 19:30 y si ya llegó a +50 %. Si ninguna pasa el umbral, lo
-  dice y no muestra nada. Debajo, todas las candidatas del día ordenadas por puntuación.
-- **Seguimiento de la red:** las monedas que mostró cada día con su resultado a 10 días (verde si llegó a
-  +50 %), cuántas acertó y cuántas llegaron entre todas las candidatas de esos días, para comparar.
+  dice y no muestra nada.
+- **Seguimiento de la red:** un apartado por día (el más reciente abierto) con las monedas que mostró y su
+  resultado a 10 días (verde si llegó a +50 %); si no mostró ninguna, lo dice y cuál fue la mejor puntuada.
+  Arriba, cuántas acertó en total y cuántas llegaron entre todas las candidatas de esos días, para comparar.
+- **Candidatas por día:** un apartado por día con todas las monedas de Momento-A y Momento-B ordenadas por
+  la puntuación de la red, cuáles mostró, el máximo desde las 19:30 y el resultado de cada una (de
+  `datos/etiquetas.csv`, que se actualiza cada día a las 19:30). Cada apartado se dibuja al abrirlo.
 - **Tus estrellas** (★) al lado de cada moneda; la red no las usa.
 - **Cómo decide:** el umbral y los resultados de la red en la validación y con tus listas reales.
 - **Gráficos de velas 1D** (las diarias de Binance, que abren a las 00:00 UTC; se ven en hora Lima, así que
@@ -161,7 +165,8 @@ primera.
   colores de Binance, una flecha en la vela del día de la lista y líneas en el precio de las 19:30 y en su
   +50 %. Las monedas que muestra la red tienen su gráfico en la tarjeta; cualquier moneda de las tablas se
   abre a pantalla completa (rueda o pellizco para acercar, `←` / `→` para pasar de moneda, `0` para ver todo
-  el historial, `Esc` para cerrar), con el volumen y los valores de cada vela al pasar el ratón.
+  el historial, `Esc` para cerrar), con el volumen y los valores de cada vela al pasar el ratón. Las flechas
+  pasan a la moneda siguiente del mismo día y de la misma tabla.
 
 Los precios, el máximo de los últimos 10 días y las velas los pide la página a Binance desde tu navegador
 (`api.binance.com` y `fapi.binance.com`).
