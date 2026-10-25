@@ -5,7 +5,8 @@
 Escribe ``sitio/index.html`` y ``sitio/datos.json`` con:
 
 - las predicciones de cada día (``predicciones/*.json``, sin las señales);
-- el resultado a 10 días de cada moneda predicha (``datos/etiquetas.csv``);
+- el resultado a 10 días de cada candidata de esos días (``datos/etiquetas.csv``; si aún no terminó, hasta
+  dónde va);
 - las estrellas de cada día, de las listas copiadas (la red no las usa: se muestran al lado);
 - el resumen del informe de la red (``modelo/red.json``).
 
@@ -69,8 +70,8 @@ def construir(destino: Path, predicciones: Path = PREDICCIONES, etiquetas_csv: P
     resultados = {}
     for (fecha, nombre), fila in etiquetas.leer_csv(etiquetas_csv).items():
         if (fecha, nombre) in predichas:
-            resultados[f"{fecha}|{nombre}"] = {k: fila[k] for k in ("estado", "referencia", "pct_maximo",
-                                                                     "dias_hasta_50")}
+            resultados[f"{fecha}|{nombre}"] = {k: fila.get(k, "") for k in ("estado", "referencia", "pct_maximo",
+                                                                             "dias_hasta_50", "dias_vistos")}
     datos = {"generado": (ahora or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ"),
              "dias": dias, "resultados": resultados, "estrellas": estrellas(raiz_listas), "modelo": _modelo(modelo)}
     destino.mkdir(parents=True, exist_ok=True)

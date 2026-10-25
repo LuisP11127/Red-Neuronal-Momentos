@@ -146,22 +146,32 @@ primera.
 
 ## La web
 
-`python -m red_momentos.web sitio` genera la página (la publica el workflow **Web**):
+`python -m red_momentos.web sitio` genera la página (la publica el workflow **Web**). Tiene dos pestañas (recuerda la última elegida; `…/#historial` abre el historial):
 
-- **Lista del día:** solo las monedas que pasan el umbral, cada una con su puntuación, el precio de las
-  19:30, el precio actual, el máximo desde las 19:30 y si ya llegó a +50 %. Si ninguna pasa el umbral, lo
-  dice y no muestra nada. Debajo, todas las candidatas del día ordenadas por puntuación.
-- **Seguimiento de la red:** las monedas que mostró cada día con su resultado a 10 días (verde si llegó a
-  +50 %), cuántas acertó y cuántas llegaron entre todas las candidatas de esos días, para comparar.
+- **Hoy**
+  - **Lista del día:** solo las monedas que pasan el umbral, cada una con su puntuación, el precio de las
+    19:30, el precio actual, el máximo desde las 19:30, si ya llegó a +50 % y su gráfico. Si ninguna pasa el
+    umbral, lo dice y no muestra nada. Debajo, «Ver todas las candidatas del día», ordenadas por puntuación.
+  - **Cómo decide:** el umbral y los resultados de la red en la validación y con tus listas reales.
+- **Historial**
+  - Arriba, cuántos días hay, en cuántos mostró monedas la red, cuántas de las que mostró llegaron a +50 % y
+    cuántas llegaron entre todas las candidatas de esos días, para comparar.
+  - Un apartado por día (el más reciente abierto; cada uno se dibuja al abrirlo) con **lo que mostró la red**
+    y su resultado a 10 días (o, si no mostró ninguna, cuál fue la mejor puntuada) y **todas las candidatas**
+    ordenadas por puntuación, con cuáles mostró, el máximo desde las 19:30 y el resultado de cada una (de
+    `datos/etiquetas.csv`, que se actualiza cada día a las 19:30). Verde si llegó a +50 %.
+
+En las dos pestañas:
+
 - **Tus estrellas** (★) al lado de cada moneda; la red no las usa.
-- **Cómo decide:** el umbral y los resultados de la red en la validación y con tus listas reales.
 - **Gráficos de velas 1D** (las diarias de Binance, que abren a las 00:00 UTC; se ven en hora Lima, así que
   la vela del día de la lista lleva su fecha) con **todo el historial del par**: la página pide 1000 velas por
   petición y sigue hacia atrás hasta la primera vela que tiene Binance. Llevan MA(7), MA(25) y MA(99) con los
   colores de Binance, una flecha en la vela del día de la lista y líneas en el precio de las 19:30 y en su
   +50 %. Las monedas que muestra la red tienen su gráfico en la tarjeta; cualquier moneda de las tablas se
   abre a pantalla completa (rueda o pellizco para acercar, `←` / `→` para pasar de moneda, `0` para ver todo
-  el historial, `Esc` para cerrar), con el volumen y los valores de cada vela al pasar el ratón.
+  el historial, `Esc` para cerrar), con el volumen y los valores de cada vela al pasar el ratón. Las flechas
+  pasan a la moneda siguiente del mismo día y de la misma tabla.
 
 Los precios, el máximo de los últimos 10 días y las velas los pide la página a Binance desde tu navegador
 (`api.binance.com` y `fapi.binance.com`).
