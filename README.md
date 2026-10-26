@@ -1,7 +1,7 @@
 # Red-Neuronal-Momentos
 
-Red neuronal que, cada día a las **19:30 (hora Lima)**, revisa las monedas que salieron en las listas de
-seguimiento de [Momento-A](https://github.com/LuisP11127/Momento-A) y
+Red neuronal que, cada día después del cierre de la vela diaria (19:00 hora Lima), revisa las monedas que
+salieron en las listas de seguimiento de [Momento-A](https://github.com/LuisP11127/Momento-A) y
 [Momento-B](https://github.com/LuisP11127/Momento-B) y dice cuáles pueden llegar a **+50 % en los 10 días
 siguientes**. [Scanner-pump](https://github.com/LuisP11127/Scanner-pump) se usa para comparar.
 
@@ -132,7 +132,7 @@ predice con numpy, así no depende de la versión de scikit-learn.
 
 ## La predicción de cada día
 
-`python -m red_momentos.prediccion` (paso del workflow **Diario**, a las 19:30 hora Lima) puntúa las monedas
+`python -m red_momentos.prediccion` (paso del workflow **Diario**, programado a las 19:30 hora Lima) puntúa las monedas
 de Momento-A y Momento-B del día cuya vela acaba de cerrar y guarda `predicciones/AAAA-MM-DD.json`: todas
 las candidatas ordenadas por puntuación, el precio a esa hora, cuáles pasan el umbral (`mostrar`) y sus
 señales.
@@ -144,13 +144,24 @@ vacías. Como cada predicción guarda sus señales, se pueden comparar con las d
 misma moneda cuando se publiquen. Si el día ya tiene predicción no se repite, así conserva el precio de la
 primera.
 
+**La hora real.** GitHub lanza el workflow con retraso (se han visto más de cuatro horas: la lista del 22 de
+octubre se calculó a las 23:54 hora Lima). La lista sale igual y guarda la hora en que se calculó.
+`python -m red_momentos.aciertos` (el paso siguiente del **Diario**) mide cada lista **desde esa hora y el
+precio de ese momento**, no desde las 19:30, para no contar como acierto una subida que pasó antes de que la
+red diera su lista: el máximo de los 10 días siguientes llega a +50 % sobre ese precio, con velas de 15
+minutos desde la primera que abre después de esa hora. Lo hace con todas las candidatas de cada lista, para
+comparar con la misma regla, y lo guarda en `predicciones/resultados.csv` (una fila por candidata, con
+`mostrada`, `hora`, `precio`, el máximo y el mínimo, `dias_hasta_50`, `dias_vistos` y `estado`). Las
+etiquetas con las que se entrena la red siguen siendo las de `datos/etiquetas.csv` (19:30), porque ahí las
+señales también son de las 19:30.
+
 ## La web
 
 `python -m red_momentos.web sitio` genera la página (la publica el workflow **Web**). Tiene dos pestañas (recuerda la última elegida; `…/#historial` abre el historial):
 
 - **Hoy**
   - **Lista del día:** solo las monedas que pasan el umbral, cada una con su puntuación, el precio de las
-    19:30, el precio actual, el máximo desde las 19:30, si ya llegó a +50 % y su gráfico. Si ninguna pasa el
+    lista, el precio actual, el máximo desde la lista, si ya llegó a +50 % y su gráfico. Si ninguna pasa el
     umbral, lo dice y no muestra nada. Debajo, «Ver todas las candidatas del día», ordenadas por puntuación.
   - **Cómo decide:** el umbral y los resultados de la red en la validación y con tus listas reales.
 - **Historial**
@@ -158,8 +169,8 @@ primera.
     cuántas llegaron entre todas las candidatas de esos días, para comparar.
   - Un apartado por día (el más reciente abierto; cada uno se dibuja al abrirlo) con **lo que mostró la red**
     y su resultado a 10 días (o, si no mostró ninguna, cuál fue la mejor puntuada) y **todas las candidatas**
-    ordenadas por puntuación, con cuáles mostró, el máximo desde las 19:30 y el resultado de cada una (de
-    `datos/etiquetas.csv`, que se actualiza cada día a las 19:30). Verde si llegó a +50 %.
+    ordenadas por puntuación, con cuáles mostró, el máximo desde la lista y el resultado de cada una (de
+    `predicciones/resultados.csv`, que se actualiza cada día). Verde si llegó a +50 %.
 
 En las dos pestañas:
 
@@ -167,7 +178,7 @@ En las dos pestañas:
 - **Gráficos de velas 1D** (las diarias de Binance, que abren a las 00:00 UTC; se ven en hora Lima, así que
   la vela del día de la lista lleva su fecha) con **todo el historial del par**: la página pide 1000 velas por
   petición y sigue hacia atrás hasta la primera vela que tiene Binance. Llevan MA(7), MA(25) y MA(99) con los
-  colores de Binance, una flecha en la vela del día de la lista y líneas en el precio de las 19:30 y en su
+  colores de Binance, una flecha en la vela del día de la lista y líneas en el precio de la lista y en su
   +50 %. Las monedas que muestra la red tienen su gráfico en la tarjeta; cualquier moneda de las tablas se
   abre a pantalla completa (rueda o pellizco para acercar, `←` / `→` para pasar de moneda, `0` para ver todo
   el historial, `Esc` para cerrar), con el volumen y los valores de cada vela al pasar el ratón. Las flechas
@@ -180,7 +191,7 @@ Los precios, el máximo de los últimos 10 días y las velas los pide la página
 
 | Workflow | Cuándo | Qué hace |
 |---|---|---|
-| **Diario** (`diario.yml`) | Cada día a las 00:30 UTC (19:30 hora Lima) y a mano en **Actions → Diario → Run workflow**. | Copia las tres listas, calcula las etiquetas y las señales y guarda los cambios en `datos/`. El resumen de la ejecución trae la tabla de cuántas llegaron a +50 %. |
+| **Diario** (`diario.yml`) | Programado a las 00:30 UTC (19:30 hora Lima; GitHub suele lanzarlo horas después) y a mano en **Actions → Diario → Run workflow**. | Copia las tres listas, da la lista de la red, mide las listas anteriores, calcula las etiquetas y las señales y guarda los cambios en `datos/` y `predicciones/`. El resumen de la ejecución trae la tabla de cuántas llegaron a +50 %. |
 | **Entrenar** (`entrenar.yml`) | Cada lunes a las 01:07 UTC y a mano. | Entrena la red y guarda `modelo/`. El informe sale en el resumen de la ejecución. |
 | **Reconstrucción** (`reconstruccion.yml`) | Solo a mano. | Rehace `datos/reconstruccion/filas.csv.gz`. La primera vez tarda unas 2-3 horas; lo descargado queda en la caché de Actions. |
 | **Web** (`web.yml`) | Tras cada Diario, Entrenar y Reconstrucción, cada cambio en `main` y a mano. | Publica la web en GitHub Pages. |
@@ -212,8 +223,9 @@ python -m red_momentos.senales
 python -m red_momentos.reconstruccion
 # Entrenar la red
 python -m red_momentos.red
-# Lista de la red para el día cuya vela acaba de cerrar
+# Lista de la red para el día cuya vela acaba de cerrar, y el resultado de las listas desde su hora
 python -m red_momentos.prediccion
+python -m red_momentos.aciertos
 # Web (sitio/index.html y sitio/datos.json)
 python -m red_momentos.web sitio
 ```

@@ -102,8 +102,8 @@
   <div id="pestana-historial" role="tabpanel" hidden>
     <h2>Historial</h2>
     <p class="nota">Un apartado por día: lo que mostró la red y todas las candidatas de Momento-A y Momento-B, ordenadas por
-      su puntuación. El resultado se mide desde el precio de las 19:30 (hora Lima) hasta 10 días después y se actualiza
-      cada día a las 19:30; si llegó a +50 %, la fila se pinta de verde. Pulsa una moneda para ver su gráfico.</p>
+      su puntuación. El resultado se mide desde la hora y el precio en que la red calculó la lista hasta 10 días después
+      y se actualiza cada día; si llegó a +50 %, la fila se pinta de verde. Pulsa una moneda para ver su gráfico.</p>
     <div id="resumen-historial" class="resumen"></div>
     <div id="historial"></div>
   </div>
@@ -148,8 +148,6 @@ const clase = (v) => v == null || isNaN(v) ? "" : v >= 0 ? "sube" : "baja";
 const precio = (v) => v == null || isNaN(v) ? "—" : coma(v >= 1000 ? v.toFixed(2) : String(Number(v.toPrecision(5))));
 const puntos = (p) => coma((p * 100).toFixed(0)) + " %";
 
-// Las 19:30 en Lima (00:30 UTC) tras el cierre de la vela del día de la lista (abre el día siguiente a las 00:00 UTC).
-const referenciaMs = (dia) => Date.parse(dia + "T00:00:00Z") + 2 * DIA + PASO;
 
 function enlace(m) {
   const base = m.simbolo.replace(/USDT$/, "");
@@ -216,7 +214,7 @@ const decimales = (v) => !v ? 2 : Math.min(10, Math.max(2, 4 - Math.floor(Math.l
 const tiempo = (ms) => Math.floor((ms + LIMA) / 1000);
 const diaVela = (ms) => new Date(ms + LIMA).toLocaleDateString("es-PE", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"});
 
-// ``ref``: precio de las 19:30 (línea discontinua) y su +50 % (punteada). La flecha marca la vela del día de la lista.
+// ``ref``: precio de la lista (línea discontinua) y su +50 % (punteada). La flecha marca la vela del día de la lista.
 function dibujar(el, filas, dia, ref, grande) {
   const c = colores();
   const d = decimales(filas[filas.length - 1][4]);
@@ -253,7 +251,7 @@ function dibujar(el, filas, dia, ref, grande) {
   if (indice >= 0) serie.setMarkers([{time: velas[indice].time, position: "aboveBar", color: c.acento, shape: "arrowDown", text: grande ? "Lista" : ""}]);
   if (ref) {
     serie.createPriceLine({price: ref, color: c.acento, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
-                           axisLabelVisible: grande, title: grande ? "19:30" : ""});
+                           axisLabelVisible: grande, title: grande ? "Lista" : ""});
     serie.createPriceLine({price: ref * 1.5, color: c.verde, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted,
                            axisLabelVisible: grande, title: grande ? "+50 %" : ""});
   }
@@ -370,22 +368,26 @@ function filasQueAbren(contenedor, lista) {
   });
 }
 
-// Máximo desde las 19:30, con la misma regla que las etiquetas: velas de 30 minutos durante 10 días.
-async function enVivo(dia, m) {
-  const inicio = referenciaMs(dia);
+// Máximo desde la hora de la lista (GitHub la calcula con retraso), con la misma regla que predicciones/resultados.csv:
+// velas de 15 minutos desde la primera que abre después de esa hora, durante 10 días, sobre el precio de la lista.
+const PASO_VIVO = 15 * 60000;
+async function enVivo(d, m) {
+  const desde = Date.parse(d.hora);
+  if (!m.precio || isNaN(desde)) return null;
+  const inicio = Math.ceil(desde / PASO_VIVO) * PASO_VIVO, fin = desde + VENTANA * DIA;
   if (Date.now() < inicio) return null;
-  const velas = await pedir(m.mercado, `/klines?symbol=${m.simbolo}&interval=30m&startTime=${inicio}&limit=500`);
-  if (!Array.isArray(velas) || !velas.length || velas[0][0] !== inicio) return null;
-  const fin = inicio + VENTANA * DIA, ref = +velas[0][1];
+  const velas = await pedir(m.mercado, `/klines?symbol=${m.simbolo}&interval=15m&startTime=${inicio}&limit=1000`);
+  if (!Array.isArray(velas) || !velas.length) return null;
+  const ref = m.precio;
   let maximo = -Infinity, dias = null;
   for (const v of velas) {
     if (v[0] >= fin) break;
     maximo = Math.max(maximo, +v[2]);
-    if (dias === null && +v[2] >= ref * 1.5) dias = Math.floor((v[0] - inicio) / DIA) + 1;
+    if (dias === null && +v[2] >= ref * 1.5) dias = Math.floor((v[0] - desde) / DIA) + 1;
   }
   const actual = +velas[velas.length - 1][4];
   return {ref, maximo, pctMax: (maximo / ref - 1) * 100, dias, actual, variacion: (actual / ref - 1) * 100,
-          terminado: Date.now() >= fin, diaActual: Math.min(VENTANA, Math.floor((Date.now() - inicio) / DIA) + 1)};
+          terminado: Date.now() >= fin, diaActual: Math.min(VENTANA, Math.floor((Date.now() - desde) / DIA) + 1)};
 }
 
 function resultadoTexto(r) {
@@ -395,7 +397,7 @@ function resultadoTexto(r) {
   return `Día ${r.diaActual} de ${VENTANA}`;
 }
 
-// Resultado de datos/etiquetas.csv (se calcula cada día a las 19:30): el final o, si aún no terminó, hasta dónde va.
+// Resultado de predicciones/resultados.csv (se calcula cada día): el final o, si aún no terminó, hasta dónde va.
 function resultadoGuardado(datos, dia, m) {
   const r = datos.resultados[`${dia}|${m.moneda}`];
   if (!r || !r.referencia || (r.estado !== "llego" && r.estado !== "no_llego" && r.estado !== "pendiente")) return null;
@@ -405,10 +407,10 @@ function resultadoGuardado(datos, dia, m) {
 }
 
 // Resultado de una moneda mostrada: el guardado si ya terminó; si no, en vivo (y si Binance no responde, el guardado).
-async function resultado(datos, dia, m) {
-  const guardado = resultadoGuardado(datos, dia, m);
+async function resultado(datos, d, m) {
+  const guardado = resultadoGuardado(datos, d.fecha, m);
   if (guardado && guardado.final) return guardado;
-  return (await enVivo(dia, m)) || guardado;
+  return (await enVivo(d, m)) || guardado;
 }
 
 // Un apartado por día (el más reciente abierto); su contenido se dibuja la primera vez que se abre.
@@ -437,10 +439,10 @@ function tarjeta(datos, dia, m, r) {
       ${estrella}<span class="chip">${m.mercado === "futures" ? "Futuros" : "Spot"}</span> ${listas}</div>
     <dl class="datos">
       ${fila("Puntuación de la red", puntos(m.puntuacion))}
-      ${fila("Precio a las 19:30", precio(r ? r.ref : m.precio))}
+      ${fila("Precio de la lista", precio(r ? r.ref : m.precio))}
       ${fila("Precio actual", precio(r && r.actual))}
       ${fila("Variación", pct(r && r.variacion), clase(r && r.variacion))}
-      ${fila("Máximo desde las 19:30", pct(r && r.pctMax), clase(r && r.pctMax))}
+      ${fila("Máximo desde la lista", pct(r && r.pctMax), clase(r && r.pctMax))}
       ${fila("Rumbo al 50", resultadoTexto(r))}
     </dl><div class="grafico-mini" title="Ampliar el gráfico"></div></article>`;
 }
@@ -472,9 +474,9 @@ async function tablaMostradas(datos, d, el) {
     return;
   }
   el.innerHTML = `<p class="nota">Cargando…</p>`;
-  const resultados = await Promise.all(mostradas.map((m) => resultado(datos, d.fecha, m)));
+  const resultados = await Promise.all(mostradas.map((m) => resultado(datos, d, m)));
   el.innerHTML = `<div class="tabla plana"><table><thead><tr><th>Moneda</th><th class="n">Puntuación</th>
-    <th class="n">Precio 19:30</th><th class="n">Máximo</th><th>Resultado</th></tr></thead><tbody>
+    <th class="n">Precio de la lista</th><th class="n">Máximo</th><th>Resultado</th></tr></thead><tbody>
     ${mostradas.map((m, i) => {
       const r = resultados[i];
       return `<tr data-i="${i}"${r && r.dias ? ' class="llego"' : ""}>
@@ -489,8 +491,8 @@ async function pintarHoy(datos) {
   const caja = document.getElementById("hoy");
   const hoy = datos.dias[0];
   if (!hoy) {
-    caja.innerHTML = `<div class="vacio">${datos.modelo ? "Todavía no hay ninguna lista: la primera sale a las 19:30 (hora Lima)."
-      : "La red todavía no está entrenada. Cuando lo esté, su lista saldrá cada día a las 19:30 (hora Lima)."}</div>`;
+    caja.innerHTML = `<div class="vacio">${datos.modelo ? "Todavía no hay ninguna lista: la primera sale después del cierre de la vela diaria (19:00 hora Lima)."
+      : "La red todavía no está entrenada. Cuando lo esté, su lista saldrá cada día después del cierre de la vela diaria (19:00 hora Lima)."}</div>`;
     return;
   }
   const mostradas = hoy.monedas.filter((m) => m.mostrar);
@@ -519,7 +521,7 @@ async function pintarHoy(datos) {
       });
     };
     pintar(mostradas.map(() => null), false);
-    pintar(await Promise.all(mostradas.map((m) => enVivo(hoy.fecha, m))), true);
+    pintar(await Promise.all(mostradas.map((m) => enVivo(hoy, m))), true);
   }
 }
 
@@ -590,11 +592,14 @@ function pintarComo(datos) {
     ? `mostró ${e.umbral.mostradas} y llegaron ${e.umbral.llegaron} (${coma((e.umbral.precision * 100).toFixed(0))} %; al azar, ${coma((e.base * 100).toFixed(0))} %)`
     : "no mostró ninguna";
   document.getElementById("como").innerHTML = `
-    <p>Cada día a las 19:30 (hora Lima) la red puntúa las monedas de Momento-A y Momento-B del día con señales de ese
-      momento: velas, medias, volumen, explosiones anteriores, en qué listas salió y, en futuros, el libro de órdenes,
-      el interés abierto y las relaciones long/short. Muestra una moneda solo si su puntuación pasa el umbral
+    <p>Cada día, después del cierre de la vela diaria (19:00 hora Lima), la red puntúa las monedas de Momento-A y
+      Momento-B del día con señales de ese momento: velas, medias, volumen, explosiones anteriores, en qué listas salió
+      y, en futuros, el libro de órdenes, el interés abierto y las relaciones long/short. Muestra una moneda solo si su
+      puntuación pasa el umbral
       ${m.umbral == null ? "(ahora no hay umbral: ninguno llegó a 3 de cada 10 en las pruebas, así que no muestra ninguna)"
         : `(${puntos(m.umbral)}): el más bajo con el que, en las pruebas con días pasados, al menos 3 de cada 10 llegaron a +50 %`}.</p>
+    <p class="nota">GitHub lanza el cálculo con retraso (suele ser entre las 19:30 y las 00:00 hora Lima), así que cada
+      lista lleva la hora en que se calculó y su resultado se mide desde esa hora y el precio de ese momento.</p>
     <p class="nota">En la validación (${m.tramos ? `${fecha(m.tramos.validacion[0])} de ${m.tramos.validacion[0].slice(0, 4)} a ${fecha(m.tramos.validacion[1])} de ${m.tramos.validacion[1].slice(0, 4)}` : ""})
       ${parte(m.validacion)}. Con tus listas reales ${parte(m.prueba)}.
       <a href="${informe}" target="_blank" rel="noopener">Informe completo</a>.</p>`;

@@ -4,10 +4,12 @@ name: Diario
 # (00:00 UTC) y cuando el escaneo automático de Scanner-pump (00:07 UTC) ya guardó su día.
 #   1. Copia las listas de seguimiento de Momento-A, Momento-B y Scanner-pump a datos/listas/.
 #   2. La red puntúa las monedas del día y guarda su lista en predicciones/AAAA-MM-DD.json.
-#   3. Calcula las etiquetas (¿llegó a +50 % en los 10 días siguientes?) en datos/etiquetas.csv.
-#   4. Calcula las señales de cada moneda a las 19:30 en datos/senales.csv.
-#   5. Guarda los cambios en el repositorio.
-# GitHub solo ejecuta los workflows programados desde la rama principal y puede retrasarlos unos minutos.
+#   3. Mide cada lista desde la hora en que se calculó en predicciones/resultados.csv.
+#   4. Calcula las etiquetas (¿llegó a +50 % en los 10 días siguientes?) en datos/etiquetas.csv.
+#   5. Calcula las señales de cada moneda a las 19:30 en datos/senales.csv.
+#   6. Guarda los cambios en el repositorio.
+# GitHub solo ejecuta los workflows programados desde la rama principal y suele lanzarlo con retraso (se han visto
+# más de cuatro horas): la lista sale igual, con la hora en que se calculó, y su resultado se mide desde esa hora.
 # También se lanza a mano: Actions → Diario → Run workflow.
 on:
   schedule:
@@ -67,14 +69,21 @@ jobs:
           { echo '```'; echo; } >> "$GITHUB_STEP_SUMMARY"
           exit $codigo
 
-      # Justo después de copiar las listas, para que el libro y las métricas sean de las 19:30. Si la red aún
-      # no está entrenada (no hay modelo/red.json), no hace nada.
+      # Justo después de copiar las listas, para que el libro y las métricas sean lo más cercanos posible a las
+      # 19:30. Si la red aún no está entrenada (no hay modelo/red.json), no hace nada.
       - name: Predecir
         id: prediccion
         if: always()
         continue-on-error: true
         shell: bash
         run: python -m red_momentos.prediccion | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Medir las listas de la red
+        id: aciertos
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: python -m red_momentos.aciertos | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Calcular las etiquetas
         id: etiquetas
@@ -108,7 +117,8 @@ jobs:
           done
           if ! git diff --cached --quiet -- datos/etiquetas.csv; then partes+=("etiquetas"); fi
           if ! git diff --cached --quiet -- datos/senales.csv; then partes+=("señales"); fi
-          if [ -n "$(git diff --cached --name-only -- predicciones)" ]; then partes+=("predicción"); fi
+          if [ -n "$(git diff --cached --name-only -- 'predicciones/*.json')" ]; then partes+=("predicción"); fi
+          if ! git diff --cached --quiet -- predicciones/resultados.csv; then partes+=("resultados de la red"); fi
           mensaje="Datos: $(printf '%s; ' "${partes[@]}" | sed 's/; $//') (automático)"
           git commit --quiet -m "$mensaje"
           # Solo este workflow escribe en datos/, así que basta con ponerse encima de lo que haya llegado.
@@ -124,7 +134,7 @@ jobs:
           exit 1
 
       - name: Avisar si algo falló
-        if: steps.listas.outcome == 'failure' || steps.etiquetas.outcome == 'failure' || steps.senales.outcome == 'failure' || steps.prediccion.outcome == 'failure'
+        if: steps.listas.outcome == 'failure' || steps.etiquetas.outcome == 'failure' || steps.senales.outcome == 'failure' || steps.prediccion.outcome == 'failure' || steps.aciertos.outcome == 'failure'
         run: |
-          echo "::error title=Actualización incompleta::Falló la copia de alguna lista, las etiquetas, las señales o la predicción; revisa los pasos de arriba."
+          echo "::error title=Actualización incompleta::Falló la copia de alguna lista, la predicción, sus resultados, las etiquetas o las señales; revisa los pasos de arriba."
           exit 1

@@ -5,13 +5,13 @@
 Escribe ``sitio/index.html`` y ``sitio/datos.json`` con:
 
 - las predicciones de cada día (``predicciones/*.json``, sin las señales);
-- el resultado a 10 días de cada candidata de esos días (``datos/etiquetas.csv``; si aún no terminó, hasta
-  dónde va);
+- el resultado a 10 días de cada candidata de esas listas, medido desde la hora y el precio de la lista
+  (``predicciones/resultados.csv``; si aún no terminó, hasta dónde va);
 - las estrellas de cada día, de las listas copiadas (la red no las usa: se muestran al lado);
 - el resumen del informe de la red (``modelo/red.json``).
 
-La página pide a Binance, desde el navegador, el precio actual y el máximo desde las 19:30 de las monedas de
-los últimos 10 días.
+La página pide a Binance, desde el navegador, el precio actual y el máximo desde la hora de la lista de las
+monedas de los últimos 10 días.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from . import etiquetas, listas, red
+from . import aciertos, listas, red
 
 PLANTILLA = Path(__file__).with_name("web.html")
 PREDICCIONES = Path("predicciones")
@@ -57,7 +57,7 @@ def _modelo(ruta: Path) -> Optional[dict]:
             "validacion": evaluacion.get("validacion"), "prueba": evaluacion.get("prueba: listas reales")}
 
 
-def construir(destino: Path, predicciones: Path = PREDICCIONES, etiquetas_csv: Path = etiquetas.SALIDA,
+def construir(destino: Path, predicciones: Path = PREDICCIONES, resultados_csv: Path = aciertos.SALIDA,
               modelo: Path = red.MODELO, raiz_listas: Path = listas.RAIZ_LISTAS,
               ahora: Optional[datetime] = None) -> dict:
     dias = []
@@ -68,10 +68,10 @@ def construir(destino: Path, predicciones: Path = PREDICCIONES, etiquetas_csv: P
                                                         "mostrar", "precio")} for m in p.get("monedas", [])]})
     predichas = {(d["fecha"], m["moneda"]) for d in dias for m in d["monedas"]}
     resultados = {}
-    for (fecha, nombre), fila in etiquetas.leer_csv(etiquetas_csv).items():
+    for (fecha, nombre), fila in aciertos.leer_csv(resultados_csv).items():
         if (fecha, nombre) in predichas:
-            resultados[f"{fecha}|{nombre}"] = {k: fila.get(k, "") for k in ("estado", "referencia", "pct_maximo",
-                                                                             "dias_hasta_50", "dias_vistos")}
+            resultados[f"{fecha}|{nombre}"] = {"estado": fila["estado"], "referencia": fila["precio"],
+                                               **{k: fila[k] for k in ("pct_maximo", "dias_hasta_50", "dias_vistos")}}
     datos = {"generado": (ahora or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ"),
              "dias": dias, "resultados": resultados, "estrellas": estrellas(raiz_listas), "modelo": _modelo(modelo)}
     destino.mkdir(parents=True, exist_ok=True)
