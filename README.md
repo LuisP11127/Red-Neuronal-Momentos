@@ -144,8 +144,10 @@ vacías. Como cada predicción guarda sus señales, se pueden comparar con las d
 misma moneda cuando se publiquen. Si el día ya tiene predicción no se repite, así conserva el precio de la
 primera.
 
-**La hora real.** GitHub lanza el workflow con retraso (se han visto más de cuatro horas: la lista del 22 de
-octubre se calculó a las 23:54 hora Lima). La lista sale igual y guarda la hora en que se calculó.
+**La hora real.** Con su horario, GitHub lanzaba el workflow con retraso (se vieron más de cuatro horas: la
+lista del 22 de octubre se calculó a las 23:54 hora Lima). Ahora lo lanza a las 19:30 el reloj de Cloudflare
+(ver [Workflows de GitHub](#workflows-de-github)), pero si un día falla, la lista sale igual con el horario de
+GitHub, y cada lista guarda la hora en que se calculó.
 `python -m red_momentos.aciertos` (el paso siguiente del **Diario**) mide cada lista **desde esa hora y el
 precio de ese momento**, no desde las 19:30, para no contar como acierto una subida que pasó antes de que la
 red diera su lista: el máximo de los 10 días siguientes llega a +50 % sobre ese precio, con velas de 15
@@ -191,7 +193,7 @@ Los precios, el máximo de los últimos 10 días y las velas los pide la página
 
 | Workflow | Cuándo | Qué hace |
 |---|---|---|
-| **Diario** (`diario.yml`) | Programado a las 00:30 UTC (19:30 hora Lima; GitHub suele lanzarlo horas después) y a mano en **Actions → Diario → Run workflow**. | Copia las tres listas, da la lista de la red, mide las listas anteriores, calcula las etiquetas y las señales y guarda los cambios en `datos/` y `predicciones/`. El resumen de la ejecución trae la tabla de cuántas llegaron a +50 %. |
+| **Diario** (`diario.yml`) | Cada día a las 00:30 UTC (19:30 hora Lima), lanzado por un Worker de Cloudflare (ver abajo); el horario de GitHub queda de respaldo. También a mano en **Actions → Diario → Run workflow**. | Copia las tres listas, da la lista de la red, mide las listas anteriores, calcula las etiquetas y las señales y guarda los cambios en `datos/` y `predicciones/`. El resumen de la ejecución trae la tabla de cuántas llegaron a +50 %. |
 | **Entrenar** (`entrenar.yml`) | Cada lunes a las 01:07 UTC y a mano. | Entrena la red y guarda `modelo/`. El informe sale en el resumen de la ejecución. |
 | **Reconstrucción** (`reconstruccion.yml`) | Solo a mano. | Rehace `datos/reconstruccion/filas.csv.gz`. La primera vez tarda unas 2-3 horas; lo descargado queda en la caché de Actions. |
 | **Web** (`web.yml`) | Tras cada Diario, Entrenar y Reconstrucción, cada cambio en `main` y a mano. | Publica la web en GitHub Pages. |
@@ -200,6 +202,16 @@ Los precios, el máximo de los últimos 10 días y las velas los pide la página
 GitHub solo ejecuta los workflows programados desde la rama principal, así que **Diario** y **Entrenar**
 empiezan a correr solo cuando este código está en `main`. Para que **Web** publique la página, GitHub Pages
 tiene que estar activado con **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+### El reloj de Cloudflare
+
+GitHub ejecuta los workflows programados con horas de retraso: el Diario de las 19:30 salía entre las 23:30
+y la 01:00 hora Lima. Los que se lanzan a mano arrancan en segundos, así que un Worker de Cloudflare
+(`reloj-red-neuronal-momentos`, código en [`cloudflare/reloj.js`](cloudflare/reloj.js)) lanza el Diario cada
+día a las **00:30 UTC** con la API de GitHub. En la prueba, GitHub lo arrancó 15 segundos después. El horario
+de `diario.yml` sigue de respaldo: si un día el Worker falla, la lista sale igual, más tarde. Usa una clave de
+GitHub guardada como secreto del Worker; cuando caduque hay que poner otra (ver
+[`cloudflare/README.md`](cloudflare/README.md)).
 
 ### Binance
 
