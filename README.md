@@ -173,7 +173,9 @@ señales también son de las 19:30.
   - Un apartado por día (el más reciente abierto; cada uno se dibuja al abrirlo) con **lo que mostró la red**
     y su resultado a 10 días (o, si no mostró ninguna, cuál fue la mejor puntuada) y **todas las candidatas**
     ordenadas por puntuación, con cuáles mostró, el mínimo y el máximo desde la lista y el resultado de cada
-    una (de `predicciones/resultados.csv`, que se actualiza cada día). Verde si llegó a +50 %.
+    una (de `predicciones/resultados.csv`, que se actualiza cada día). Verde si llegó a +50 %. Las dos tablas
+    tienen también la **variación**: el precio actual frente al precio de la lista, que la página pide a
+    Binance al abrirse (en «Lo que mostró la red», con el precio actual al lado).
 
 En las dos pestañas:
 

@@ -483,6 +483,34 @@ async function enVivo(d, m) {
           terminado: Date.now() >= fin, diaActual: Math.min(VENTANA, Math.floor((Date.now() - desde) / DIA) + 1)};
 }
 
+// Precio actual de todos los pares de un mercado: una sola petición por mercado en cada visita.
+const preciosActuales = {};
+function precioActual(mercado) {
+  if (!preciosActuales[mercado]) {
+    preciosActuales[mercado] = pedir(mercado, "/ticker/price").then((filas) => {
+      if (!Array.isArray(filas)) { delete preciosActuales[mercado]; return new Map(); }  // se reintenta en la próxima tabla
+      return new Map(filas.map((f) => [f.symbol, +f.price]));
+    });
+  }
+  return preciosActuales[mercado];
+}
+
+// Rellena, en el orden de las filas de una tabla, el precio actual (si la tabla lo tiene) y la variación frente al
+// precio de la lista.
+async function ponerVariaciones(el, filas) {
+  const actuales = el.querySelectorAll("td.actual"), variaciones = el.querySelectorAll("td.variacion");
+  await Promise.all(filas.map(async ({m, ref}, i) => {
+    const actual = (await precioActual(m.mercado)).get(m.simbolo);
+    const v = actual && ref ? (actual / ref - 1) * 100 : NaN;
+    if (actuales[i]) actuales[i].textContent = precio(actual);
+    if (variaciones[i]) {
+      variaciones[i].textContent = pct(v);
+      variaciones[i].className = `n variacion ${clase(v)}`;
+      if (actual) variaciones[i].title = `Precio actual: ${precio(actual)}`;
+    }
+  }));
+}
+
 function resultadoTexto(r) {
   if (!r) return "—";
   if (r.dias) return `Llegó en ${r.dias} ${r.dias === 1 ? "día" : "días"}`;
@@ -546,7 +574,7 @@ function tarjeta(datos, dia, m, r) {
 function tablaCandidatas(datos, d, el) {
   const resultados = d.monedas.map((m) => resultadoGuardado(datos, d.fecha, m));
   el.innerHTML = `<div class="tabla plana"><table><thead><tr><th>#</th><th>Moneda</th><th>Listas</th><th>Puntuación</th>
-    <th>La muestra</th><th class="n" title="Desde la hora de la lista, durante 10 días">Mínimo</th>
+    <th>La muestra</th><th class="n" title="Precio actual frente al precio de la lista">Variación</th><th class="n" title="Desde la hora de la lista, durante 10 días">Mínimo</th>
     <th class="n" title="Desde la hora de la lista, durante 10 días">Máximo</th><th>Resultado</th></tr></thead><tbody>
     ${d.monedas.map((m, i) => {
       const r = resultados[i];
@@ -554,11 +582,13 @@ function tablaCandidatas(datos, d, el) {
       return `<tr data-i="${i}"${clases ? ` class="${clases}"` : ""}><td>${i + 1}</td><td>${esc(m.moneda)}${conEstrella(datos, d.fecha, m)}</td>
         <td>${m.listas.map((l) => esc(NOMBRE_LISTA[l] || l)).join(", ")}</td>
         <td><span class="barra" style="width:${Math.round(m.puntuacion * 80)}px"></span>${puntos(m.puntuacion)}</td>
-        <td>${m.mostrar ? "Sí" : ""}</td><td class="n ${clase(r && r.pctMin)}">${pct(r && r.pctMin)}</td>
+        <td>${m.mostrar ? "Sí" : ""}</td><td class="n variacion">…</td><td class="n ${clase(r && r.pctMin)}">${pct(r && r.pctMin)}</td>
         <td class="n ${clase(r && r.pctMax)}">${pct(r && r.pctMax)}</td>
         <td>${resultadoTexto(r)}</td></tr>`;
     }).join("")}</tbody></table></div>`;
-  filasQueAbren(el, d.monedas.map((m, i) => ({m, dia: d.fecha, hora: d.hora, ref: resultados[i] ? resultados[i].ref : m.precio})));
+  const lista = d.monedas.map((m, i) => ({m, dia: d.fecha, hora: d.hora, ref: resultados[i] ? resultados[i].ref : m.precio}));
+  filasQueAbren(el, lista);
+  ponerVariaciones(el, lista);
 }
 
 // Las monedas que mostró la red un día, con su resultado (en vivo si aún no terminó).
@@ -573,17 +603,21 @@ async function tablaMostradas(datos, d, el) {
   el.innerHTML = `<p class="nota">Cargando…</p>`;
   const resultados = await Promise.all(mostradas.map((m) => resultado(datos, d, m)));
   el.innerHTML = `<div class="tabla plana"><table><thead><tr><th>Moneda</th><th class="n">Puntuación</th>
-    <th class="n">Precio de la lista</th><th class="n" title="Desde la hora de la lista, durante 10 días">Mínimo</th>
+    <th class="n">Precio de la lista</th><th class="n">Precio actual</th><th class="n" title="Precio actual frente al precio de la lista">Variación</th>
+    <th class="n" title="Desde la hora de la lista, durante 10 días">Mínimo</th>
     <th class="n" title="Desde la hora de la lista, durante 10 días">Máximo</th><th>Resultado</th></tr></thead><tbody>
     ${mostradas.map((m, i) => {
       const r = resultados[i];
       return `<tr data-i="${i}"${r && r.dias ? ' class="llego"' : ""}>
         <td><a href="${enlace(m)}" target="_blank" rel="noopener">${esc(m.moneda)}</a>${conEstrella(datos, d.fecha, m)}</td>
         <td class="n">${puntos(m.puntuacion)}</td><td class="n">${precio(r ? r.ref : m.precio)}</td>
+        <td class="n actual">…</td><td class="n variacion">…</td>
         <td class="n ${clase(r && r.pctMin)}">${pct(r && r.pctMin)}</td>
         <td class="n ${clase(r && r.pctMax)}">${pct(r && r.pctMax)}</td><td>${resultadoTexto(r)}</td></tr>`;
     }).join("")}</tbody></table></div>`;
-  filasQueAbren(el, mostradas.map((m, i) => ({m, dia: d.fecha, hora: d.hora, ref: resultados[i] ? resultados[i].ref : m.precio})));
+  const lista = mostradas.map((m, i) => ({m, dia: d.fecha, hora: d.hora, ref: resultados[i] ? resultados[i].ref : m.precio}));
+  filasQueAbren(el, lista);
+  ponerVariaciones(el, lista);
 }
 
 async function pintarHoy(datos) {
