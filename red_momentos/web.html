@@ -81,6 +81,11 @@
                      cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .pestanas button[aria-selected="true"] { color: var(--texto); border-bottom-color: var(--acento); }
   details.dia h3 { font-size: .95rem; margin: 12px 0 6px; }
+  .tfs { display: inline-flex; gap: 2px; }
+  .graficos-tf { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: .9rem; color: var(--suave); }
+  .graficos-tf .tfs button { font: inherit; font-size: .85rem; padding: 3px 9px; border-radius: 6px; cursor: pointer;
+                             border: 1px solid var(--borde); background: var(--tarjeta); color: var(--texto); }
+  .tfs button[aria-pressed="true"] { border-color: var(--acento); color: var(--acento); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -117,6 +122,7 @@
     <div class="botones">
       <button id="v-ant" title="Moneda anterior (←)">←</button><button id="v-sig" title="Moneda siguiente (→)">→</button>
       <button id="v-menos" title="Alejar (-)">−</button><button id="v-mas" title="Acercar (+)">+</button>
+      <span id="v-tfs" class="tfs" role="group" aria-label="Temporalidad de las velas"></span>
       <button id="v-todo" title="Ver todo el historial (0)">Todo el historial</button>
       <button id="v-dia" title="Volver al día de la lista">Día de la lista</button>
       <a id="v-binance" target="_blank" rel="noopener">Binance</a>
@@ -165,31 +171,44 @@ async function pedir(mercado, ruta) {
   return null;
 }
 
-// ---------- Gráficos: velas 1D de Binance (abren a las 00:00 UTC), con todo el historial del par ----------
+// ---------- Gráficos: velas de Binance de 1h a 1D (la de 1D abre a las 00:00 UTC), con todo el historial ----------
 const MEDIAS = [7, 25, 99];
 const LIMA = -5 * 3600000;  // los gráficos se ven en hora Lima, como Binance en Perú
 const PAGINA = 1000;        // velas por petición (el máximo de spot)
-const MAX_PAGINAS = 20;     // 20 000 velas diarias: más que el historial de cualquier par
+const MAX_VELAS = 100000;   // tope por gráfico: de 1h desde 2017 son unas 82 000
+const TEMPORALIDADES = [["1h", "1h", 3600000], ["2h", "2h", 7200000], ["4h", "4h", 14400000],
+                        ["8h", "8h", 28800000], ["12h", "12h", 43200000], ["1d", "1D", DIA]];
+const NOMBRE_TF = Object.fromEntries(TEMPORALIDADES.map(([k, n]) => [k, n]));
+let temporalidad = "1d";
+try { const t = localStorage.getItem("temporalidad"); if (NOMBRE_TF[t]) temporalidad = t; } catch (e) { /* sin almacenamiento */ }
 const historiales = new Map();
+const aFila = (f) => [f[0], +f[1], +f[2], +f[3], +f[4], +f[7]];  // apertura, o, h, l, c, volumen USDT
 
-// Todo el historial de velas 1D: la página más reciente y, hacia atrás, hasta la primera vela que tiene Binance.
-function historial(m) {
-  const clave = m.mercado + ":" + m.simbolo;
-  if (!historiales.has(clave)) {
-    historiales.set(clave, (async () => {
-      let filas = [], fin = null;
-      for (let n = 0; n < MAX_PAGINAS; n++) {
-        const pagina = await pedir(m.mercado, `/klines?symbol=${m.simbolo}&interval=1d&limit=${PAGINA}` + (fin ? `&endTime=${fin}` : ""));
-        if (!Array.isArray(pagina) || !pagina.length) break;
-        filas = pagina.concat(filas);
-        if (pagina.length < PAGINA) break;  // ya se llegó a la primera vela
-        fin = pagina[0][0] - 1;
-      }
-      if (!filas.length) historiales.delete(clave);  // se reintenta la próxima vez
-      return filas.map((f) => [f[0], +f[1], +f[2], +f[3], +f[4], +f[7]]);  // apertura, o, h, l, c, volumen USDT
-    })());
-  }
-  return historiales.get(clave);
+// Velas de un par en una temporalidad: ``listo`` trae las 1000 más recientes; ``anteriores`` añade una página más
+// antigua, hasta la primera vela que tiene Binance (``completo``) o el tope.
+function historial(m, tf) {
+  const clave = `${m.mercado}:${m.simbolo}:${tf}`;
+  let h = historiales.get(clave);
+  if (h) return h;
+  h = {filas: [], completo: false};
+  h.listo = (async () => {
+    const pagina = await pedir(m.mercado, `/klines?symbol=${m.simbolo}&interval=${tf}&limit=${PAGINA}`);
+    if (!Array.isArray(pagina) || !pagina.length) { historiales.delete(clave); return h; }  // se reintenta otra vez
+    h.filas = pagina.map(aFila);
+    h.completo = pagina.length < PAGINA;
+    return h;
+  })();
+  // Una página a la vez: si el visor se cierra y se abre mientras carga, la segunda llamada espera a la primera.
+  h.anteriores = () => h.cargando || (h.cargando = (async () => {
+    if (h.completo || !h.filas.length || h.filas.length >= MAX_VELAS) return 0;
+    const pagina = await pedir(m.mercado, `/klines?symbol=${m.simbolo}&interval=${tf}&limit=${PAGINA}&endTime=${h.filas[0][0] - 1}`);
+    if (!Array.isArray(pagina)) return 0;  // Binance no respondió: se queda como está
+    if (pagina.length < PAGINA) h.completo = true;
+    h.filas = pagina.map(aFila).concat(h.filas);
+    return pagina.length;
+  })().finally(() => { h.cargando = null; }));
+  historiales.set(clave, h);
+  return h;
 }
 
 function sma(valores, n) {
@@ -213,9 +232,23 @@ function colores() {
 const decimales = (v) => !v ? 2 : Math.min(10, Math.max(2, 4 - Math.floor(Math.log10(Math.abs(v)))));
 const tiempo = (ms) => Math.floor((ms + LIMA) / 1000);
 const diaVela = (ms) => new Date(ms + LIMA).toLocaleDateString("es-PE", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"});
+const momentoVela = (ms, tf) => tf === "1d" ? diaVela(ms)
+  : new Date(ms + LIMA).toLocaleString("es-PE", {day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC"});
 
-// ``ref``: precio de la lista (línea discontinua) y su +50 % (punteada). La flecha marca la vela del día de la lista.
-function dibujar(el, filas, dia, ref, grande) {
+// Vela que lleva la flecha «Lista»: en 1D, la del día de la lista; en las demás, la de la hora en que se calculó.
+function velaDeLaLista(filas, item, tf) {
+  if (tf === "1d") {
+    const apertura = Date.parse(item.dia + "T00:00:00Z") + DIA;  // la vela del día de la lista abre el día siguiente (UTC)
+    return filas.findIndex((f) => f[0] === apertura);
+  }
+  const hora = item.hora ? Date.parse(item.hora) : Date.parse(item.dia + "T00:30:00Z") + DIA;
+  let i = filas.length - 1;
+  while (i >= 0 && filas[i][0] > hora) i--;
+  return i >= 0 && hora - filas[i][0] < TEMPORALIDADES.find(([k]) => k === tf)[2] ? i : -1;
+}
+
+// ``item``: {dia, hora, ref}. ``ref`` es el precio de la lista (línea discontinua); su +50 %, la punteada.
+function dibujar(el, filas, item, grande, tf) {
   const c = colores();
   const d = decimales(filas[filas.length - 1][4]);
   const chart = LightweightCharts.createChart(el, {
@@ -223,56 +256,91 @@ function dibujar(el, filas, dia, ref, grande) {
     layout: {background: {type: "solid", color: c.fondo}, textColor: c.texto, fontSize: grande ? 12 : 10, attributionLogo: false},
     grid: {vertLines: {color: c.rejilla}, horzLines: {color: c.rejilla}},
     rightPriceScale: {borderColor: c.rejilla, scaleMargins: grande ? {top: 0.08, bottom: 0.22} : {top: 0.1, bottom: 0.06}},
-    timeScale: {borderColor: c.rejilla, rightOffset: grande ? 6 : 2, minBarSpacing: grande ? 0.05 : 0.5, fixLeftEdge: !grande},
+    timeScale: {borderColor: c.rejilla, rightOffset: grande ? 6 : 2, minBarSpacing: grande ? 0.01 : 0.5, fixLeftEdge: !grande,
+                timeVisible: tf !== "1d", secondsVisible: false},
     crosshair: grande ? {mode: LightweightCharts.CrosshairMode.Normal}
       : {vertLine: {visible: false, labelVisible: false}, horzLine: {visible: false, labelVisible: false}},
     handleScroll: grande, handleScale: grande,
   });
   const formato = {type: "price", precision: d, minMove: Math.pow(10, -d)};
-  const velas = filas.map((f) => ({time: tiempo(f[0]), open: f[1], high: f[2], low: f[3], close: f[4]}));
   const serie = chart.addCandlestickSeries({priceFormat: formato, upColor: c.sube, downColor: c.baja,
                                            wickUpColor: c.sube, wickDownColor: c.baja, borderVisible: false});
-  serie.setData(velas);
-  const cierres = filas.map((f) => f[4]);
-  const medias = MEDIAS.map((n, i) => {
-    const valores = sma(cierres, n);
-    const linea = chart.addLineSeries({color: c.medias[i], lineWidth: grande ? 2 : 1, priceLineVisible: false,
-                                       lastValueVisible: false, crosshairMarkerVisible: false, priceFormat: formato});
-    linea.setData(valores.flatMap((v, j) => (v == null ? [] : [{time: velas[j].time, value: v}])));
-    return valores;
-  });
+  const lineas = MEDIAS.map((n, i) => chart.addLineSeries({color: c.medias[i], lineWidth: grande ? 2 : 1, priceLineVisible: false,
+                                                           lastValueVisible: false, crosshairMarkerVisible: false, priceFormat: formato}));
+  let volumen = null;
   if (grande) {
-    const volumen = chart.addHistogramSeries({priceFormat: {type: "volume"}, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false});
+    volumen = chart.addHistogramSeries({priceFormat: {type: "volume"}, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false});
     chart.priceScale("vol").applyOptions({scaleMargins: {top: 0.82, bottom: 0}});
-    volumen.setData(filas.map((f, i) => ({time: velas[i].time, value: f[5], color: (f[4] >= f[1] ? c.sube : c.baja) + "66"})));
   }
-  const apertura = Date.parse(dia + "T00:00:00Z") + DIA;  // la vela del día de la lista abre el día siguiente (UTC)
-  const indice = filas.findIndex((f) => f[0] === apertura);
-  if (indice >= 0) serie.setMarkers([{time: velas[indice].time, position: "aboveBar", color: c.acento, shape: "arrowDown", text: grande ? "Lista" : ""}]);
-  if (ref) {
-    serie.createPriceLine({price: ref, color: c.acento, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
+  if (item.ref) {
+    serie.createPriceLine({price: item.ref, color: c.acento, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
                            axisLabelVisible: grande, title: grande ? "Lista" : ""});
-    serie.createPriceLine({price: ref * 1.5, color: c.verde, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted,
+    serie.createPriceLine({price: item.ref * 1.5, color: c.verde, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted,
                            axisLabelVisible: grande, title: grande ? "+50 %" : ""});
   }
-  const enfoque = () => {
-    const n = velas.length, visibles = grande ? 120 : 60;
-    const desde = Math.max(0, Math.min(indice >= 0 ? indice - 15 : n, n - visibles));
+  const g = {chart, tf, filas: [], medias: [], indice: -1};
+  // Pone todas las velas; si llegan velas más antiguas por la izquierda, lo que se está viendo no se mueve.
+  g.poner = (nuevas) => {
+    const rango = g.filas.length ? chart.timeScale().getVisibleLogicalRange() : null;
+    const anadidas = nuevas.length - g.filas.length;
+    g.filas = nuevas;
+    const velas = nuevas.map((f) => ({time: tiempo(f[0]), open: f[1], high: f[2], low: f[3], close: f[4]}));
+    serie.setData(velas);
+    const cierres = nuevas.map((f) => f[4]);
+    g.medias = MEDIAS.map((n, i) => {
+      const valores = sma(cierres, n);
+      lineas[i].setData(valores.flatMap((v, j) => (v == null ? [] : [{time: velas[j].time, value: v}])));
+      return valores;
+    });
+    if (volumen) volumen.setData(nuevas.map((f, i) => ({time: velas[i].time, value: f[5], color: (f[4] >= f[1] ? c.sube : c.baja) + "66"})));
+    g.indice = velaDeLaLista(nuevas, item, tf);
+    serie.setMarkers(g.indice >= 0 ? [{time: velas[g.indice].time, position: "aboveBar", color: c.acento, shape: "arrowDown", text: grande ? "Lista" : ""}] : []);
+    if (rango && anadidas > 0) chart.timeScale().setVisibleLogicalRange({from: rango.from + anadidas, to: rango.to + anadidas});
+  };
+  // Vista inicial: las últimas velas, con la de la lista dentro si no queda muy atrás.
+  g.enfoque = () => {
+    const n = g.filas.length, visibles = grande ? 150 : 60;
+    const desde = Math.max(0, Math.min(g.indice >= 0 ? g.indice - 15 : n, n - visibles));
     chart.timeScale().setVisibleLogicalRange({from: desde, to: n - 1 + (grande ? 6 : 2)});
   };
-  enfoque();
-  return {chart, serie, filas, velas, medias, enfoque};
+  g.poner(filas);
+  g.enfoque();
+  return g;
 }
 
-async function miniGrafico(el, m, dia, ref) {
-  if (!window.LightweightCharts) { el.innerHTML = `<div class="aviso">No se pudo cargar la librería de gráficos.</div>`; return; }
-  const filas = await historial(m);
-  if (!filas.length) { el.innerHTML = `<div class="aviso">Binance no respondió: sin gráfico.</div>`; return; }
-  dibujar(el, filas, dia, ref, false);
+// Botones de temporalidad; ``alElegir`` se llama con la elegida (que se recuerda para la próxima vez).
+function botonesTemporalidad(caja, alElegir) {
+  caja.innerHTML = TEMPORALIDADES.map(([k, n]) => `<button data-tf="${k}" aria-pressed="${k === temporalidad}">${n}</button>`).join("");
+  caja.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.tf === temporalidad) return;
+    temporalidad = b.dataset.tf;
+    try { localStorage.setItem("temporalidad", temporalidad); } catch (e) { /* sin almacenamiento */ }
+    document.querySelectorAll("[data-tf]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.tf === temporalidad)));
+    alElegir(temporalidad);
+  }));
 }
+
+// Gráficos de las tarjetas (las 1000 velas más recientes de la temporalidad elegida).
+const minis = [];
+async function miniGrafico(el, m, item) {
+  for (let k = minis.length - 1; k >= 0; k--) {
+    if (!minis[k].el.isConnected) { if (minis[k].g) minis[k].g.chart.remove(); minis.splice(k, 1); }
+  }
+  const registro = minis.find((x) => x.el === el) || minis[minis.push({el, m, item}) - 1];
+  if (registro.g) { registro.g.chart.remove(); registro.g = null; }
+  const pedido = registro.pedido = (registro.pedido || 0) + 1;
+  el.innerHTML = "";
+  if (!window.LightweightCharts) { el.innerHTML = `<div class="aviso">No se pudo cargar la librería de gráficos.</div>`; return; }
+  const tf = temporalidad;
+  const h = await historial(m, tf).listo;
+  if (pedido !== registro.pedido || !el.isConnected) return;  // se pidió otro gráfico mientras cargaba
+  if (!h.filas.length) { el.innerHTML = `<div class="aviso">Binance no respondió: sin gráfico.</div>`; return; }
+  registro.g = dibujar(el, h.filas, item, false, tf);
+}
+const redibujarMinis = () => minis.filter((x) => x.el.isConnected).forEach((x) => miniGrafico(x.el, x.m, x.item));
 
 // ---------- Visor a pantalla completa ----------
-const visor = {lista: [], i: 0, actual: null};
+const visor = {lista: [], i: 0, actual: null, pedido: 0};
 const $ = (id) => document.getElementById(id);
 
 function leyenda(g, idx) {
@@ -280,40 +348,61 @@ function leyenda(g, idx) {
   if (!f) return;
   const fila = (nombre, v, color) => `<span style="color:${color}">${nombre} <b>${precio(v)}</b></span>`;
   const c = colores();
-  $("v-leyenda").innerHTML = `${diaVela(f[0])} · A <b>${precio(f[1])}</b> · Máx <b>${precio(f[2])}</b> · Mín <b>${precio(f[3])}</b>
+  $("v-leyenda").innerHTML = `${momentoVela(f[0], g.tf)} · A <b>${precio(f[1])}</b> · Máx <b>${precio(f[2])}</b> · Mín <b>${precio(f[3])}</b>
     · C <b>${precio(f[4])}</b> · <span class="${clase(f[4] / f[1] - 1)}">${pct((f[4] / f[1] - 1) * 100)}</span> · `
     + MEDIAS.map((n, i) => fila(`MA(${n})`, g.medias[i][idx], c.medias[i])).join(" · ");
 }
 
+function pie(g, h, cargando) {
+  const estado = cargando ? " Cargando velas más antiguas…"
+    : h.completo ? " Es todo el historial que tiene Binance."
+    : h.filas.length >= MAX_VELAS ? ` Tope de ${MAX_VELAS.toLocaleString("es-ES")} velas.` : " Binance no dio más velas.";
+  $("v-pie").textContent = `${h.filas.length.toLocaleString("es-ES")} velas de ${NOMBRE_TF[g.tf]} desde el ${momentoVela(h.filas[0][0], g.tf)}.`
+    + estado + " Rueda o pellizco para acercar, arrastrar para moverse.";
+}
+
 async function mostrarVisor() {
-  const {m, dia, ref} = visor.lista[visor.i];
+  const item = visor.lista[visor.i];
+  const {m, dia} = item;
+  const tf = temporalidad;
   $("v-titulo").textContent = m.moneda;
-  $("v-sub").textContent = `${m.mercado === "futures" ? "Futuros" : "Spot"} · ${m.simbolo} · lista del ${fecha(dia)} · velas 1D (abren a las 19:00 hora Lima)`;
+  $("v-sub").textContent = `${m.mercado === "futures" ? "Futuros" : "Spot"} · ${m.simbolo} · lista del ${fecha(dia)} · velas de ${NOMBRE_TF[tf]}`
+    + (tf === "1d" ? " (abren a las 19:00 hora Lima)" : " (hora Lima)");
   $("v-binance").href = enlace(m);
   $("v-ant").disabled = visor.i === 0;
   $("v-sig").disabled = visor.i === visor.lista.length - 1;
   const caja = $("v-grafico");
   if (visor.actual) { visor.actual.chart.remove(); visor.actual = null; }
-  caja.innerHTML = `<div class="aviso">Cargando todo el historial…</div>`;
+  caja.innerHTML = `<div class="aviso">Cargando velas de ${NOMBRE_TF[tf]}…</div>`;
   $("v-leyenda").textContent = "";
   $("v-pie").textContent = "";
-  const pedido = visor.i;
-  const filas = window.LightweightCharts ? await historial(m) : [];
-  if (pedido !== visor.i || $("visor").hidden) return;  // se cambió de moneda o se cerró mientras cargaba
-  if (!filas.length) {
+  const pedido = ++visor.pedido;
+  const h = window.LightweightCharts ? await historial(m, tf).listo : {filas: []};
+  if (pedido !== visor.pedido || $("visor").hidden) return;  // se cambió de moneda o de temporalidad, o se cerró
+  if (!h.filas.length) {
     caja.innerHTML = `<div class="aviso">${window.LightweightCharts ? "Binance no respondió: sin gráfico." : "No se pudo cargar la librería de gráficos."}</div>`;
     return;
   }
   caja.innerHTML = "";
-  const g = dibujar(caja, filas, dia, ref, true);
+  const g = dibujar(caja, h.filas, item, true, tf);
   visor.actual = g;
-  leyenda(g, filas.length - 1);
+  leyenda(g, g.filas.length - 1);
   g.chart.subscribeCrosshairMove((p) => {
     const idx = p && p.logical != null ? Math.round(p.logical) : -1;
-    leyenda(g, idx >= 0 && idx < filas.length ? idx : filas.length - 1);
+    leyenda(g, idx >= 0 && idx < g.filas.length ? idx : g.filas.length - 1);
   });
-  $("v-pie").textContent = `Historial completo: ${filas.length.toLocaleString("es-ES")} velas de 1D desde el ${diaVela(filas[0][0])}.`
-    + " Rueda o pellizco para acercar, arrastrar para moverse.";
+  // Con el visor abierto, el resto del historial hacia atrás, página a página, sin mover lo que se ve.
+  while (visor.actual === g && !h.completo && h.filas.length < MAX_VELAS) {
+    pie(g, h, true);
+    const anadidas = await h.anteriores();
+    if (visor.actual !== g || !anadidas) break;
+    // Redibujar cuesta más cuantas más velas hay: se hace cuando las nuevas son al menos la cuarta parte.
+    if (h.filas.length - g.filas.length >= g.filas.length / 4) g.poner(h.filas);
+  }
+  if (visor.actual === g) {
+    if (g.filas.length !== h.filas.length) g.poner(h.filas);
+    pie(g, h, false);
+  }
 }
 
 function abrirVisor(lista, i) {
@@ -325,6 +414,7 @@ function abrirVisor(lista, i) {
 }
 
 function cerrarVisor() {
+  visor.pedido++;
   $("visor").hidden = true;
   document.body.style.overflow = "";
   if (visor.actual) { visor.actual.chart.remove(); visor.actual = null; }
@@ -344,6 +434,7 @@ function zoom(factor) {
   g.chart.timeScale().setVisibleLogicalRange({from: r.to - ancho, to: r.to});
 }
 
+botonesTemporalidad($("v-tfs"), () => { mostrarVisor(); redibujarMinis(); });
 $("v-cerrar").addEventListener("click", cerrarVisor);
 $("v-ant").addEventListener("click", () => mover(-1));
 $("v-sig").addEventListener("click", () => mover(1));
@@ -358,7 +449,7 @@ document.addEventListener("keydown", (e) => {
   if (accion) { e.preventDefault(); accion(); }
 });
 
-// Las filas con ``data-i`` abren el visor con su lista de monedas.
+// Las filas con ``data-i`` abren el visor con su lista de monedas ({m, dia, hora, ref}).
 function filasQueAbren(contenedor, lista) {
   contenedor.querySelectorAll("tr[data-i]").forEach((tr) => {
     tr.classList.add("abre");
@@ -368,7 +459,7 @@ function filasQueAbren(contenedor, lista) {
   });
 }
 
-// Máximo desde la hora de la lista (GitHub la calcula con retraso), con la misma regla que predicciones/resultados.csv:
+// Mínimo y máximo desde la hora de la lista, con la misma regla que predicciones/resultados.csv:
 // velas de 15 minutos desde la primera que abre después de esa hora, durante 10 días, sobre el precio de la lista.
 const PASO_VIVO = 15 * 60000;
 async function enVivo(d, m) {
@@ -379,14 +470,16 @@ async function enVivo(d, m) {
   const velas = await pedir(m.mercado, `/klines?symbol=${m.simbolo}&interval=15m&startTime=${inicio}&limit=1000`);
   if (!Array.isArray(velas) || !velas.length) return null;
   const ref = m.precio;
-  let maximo = -Infinity, dias = null;
+  let maximo = -Infinity, minimo = Infinity, dias = null;
   for (const v of velas) {
     if (v[0] >= fin) break;
     maximo = Math.max(maximo, +v[2]);
+    minimo = Math.min(minimo, +v[3]);
     if (dias === null && +v[2] >= ref * 1.5) dias = Math.floor((v[0] - desde) / DIA) + 1;
   }
   const actual = +velas[velas.length - 1][4];
-  return {ref, maximo, pctMax: (maximo / ref - 1) * 100, dias, actual, variacion: (actual / ref - 1) * 100,
+  return {ref, maximo, pctMax: (maximo / ref - 1) * 100, minimo, pctMin: (minimo / ref - 1) * 100, dias, actual,
+          variacion: (actual / ref - 1) * 100,
           terminado: Date.now() >= fin, diaActual: Math.min(VENTANA, Math.floor((Date.now() - desde) / DIA) + 1)};
 }
 
@@ -401,7 +494,8 @@ function resultadoTexto(r) {
 function resultadoGuardado(datos, dia, m) {
   const r = datos.resultados[`${dia}|${m.moneda}`];
   if (!r || !r.referencia || (r.estado !== "llego" && r.estado !== "no_llego" && r.estado !== "pendiente")) return null;
-  return {ref: +r.referencia, pctMax: r.pct_maximo === "" ? NaN : +r.pct_maximo,
+  const numero = (v) => v === "" || v == null ? NaN : +v;
+  return {ref: +r.referencia, pctMax: numero(r.pct_maximo), pctMin: numero(r.pct_minimo),
           dias: r.dias_hasta_50 ? +r.dias_hasta_50 : null, terminado: r.estado === "no_llego",
           final: r.estado !== "pendiente", diaActual: Math.min(VENTANA, (+r.dias_vistos || 0) + 1)};
 }
@@ -442,6 +536,7 @@ function tarjeta(datos, dia, m, r) {
       ${fila("Precio de la lista", precio(r ? r.ref : m.precio))}
       ${fila("Precio actual", precio(r && r.actual))}
       ${fila("Variación", pct(r && r.variacion), clase(r && r.variacion))}
+      ${fila("Mínimo desde la lista", pct(r && r.pctMin), clase(r && r.pctMin))}
       ${fila("Máximo desde la lista", pct(r && r.pctMax), clase(r && r.pctMax))}
       ${fila("Rumbo al 50", resultadoTexto(r))}
     </dl><div class="grafico-mini" title="Ampliar el gráfico"></div></article>`;
@@ -451,17 +546,19 @@ function tarjeta(datos, dia, m, r) {
 function tablaCandidatas(datos, d, el) {
   const resultados = d.monedas.map((m) => resultadoGuardado(datos, d.fecha, m));
   el.innerHTML = `<div class="tabla plana"><table><thead><tr><th>#</th><th>Moneda</th><th>Listas</th><th>Puntuación</th>
-    <th>La muestra</th><th class="n">Máximo</th><th>Resultado</th></tr></thead><tbody>
+    <th>La muestra</th><th class="n" title="Desde la hora de la lista, durante 10 días">Mínimo</th>
+    <th class="n" title="Desde la hora de la lista, durante 10 días">Máximo</th><th>Resultado</th></tr></thead><tbody>
     ${d.monedas.map((m, i) => {
       const r = resultados[i];
       const clases = [m.mostrar ? "mostrada" : "", r && r.dias ? "llego" : ""].filter(Boolean).join(" ");
       return `<tr data-i="${i}"${clases ? ` class="${clases}"` : ""}><td>${i + 1}</td><td>${esc(m.moneda)}${conEstrella(datos, d.fecha, m)}</td>
         <td>${m.listas.map((l) => esc(NOMBRE_LISTA[l] || l)).join(", ")}</td>
         <td><span class="barra" style="width:${Math.round(m.puntuacion * 80)}px"></span>${puntos(m.puntuacion)}</td>
-        <td>${m.mostrar ? "Sí" : ""}</td><td class="n ${clase(r && r.pctMax)}">${pct(r && r.pctMax)}</td>
+        <td>${m.mostrar ? "Sí" : ""}</td><td class="n ${clase(r && r.pctMin)}">${pct(r && r.pctMin)}</td>
+        <td class="n ${clase(r && r.pctMax)}">${pct(r && r.pctMax)}</td>
         <td>${resultadoTexto(r)}</td></tr>`;
     }).join("")}</tbody></table></div>`;
-  filasQueAbren(el, d.monedas.map((m, i) => ({m, dia: d.fecha, ref: resultados[i] ? resultados[i].ref : null})));
+  filasQueAbren(el, d.monedas.map((m, i) => ({m, dia: d.fecha, hora: d.hora, ref: resultados[i] ? resultados[i].ref : m.precio})));
 }
 
 // Las monedas que mostró la red un día, con su resultado (en vivo si aún no terminó).
@@ -476,15 +573,17 @@ async function tablaMostradas(datos, d, el) {
   el.innerHTML = `<p class="nota">Cargando…</p>`;
   const resultados = await Promise.all(mostradas.map((m) => resultado(datos, d, m)));
   el.innerHTML = `<div class="tabla plana"><table><thead><tr><th>Moneda</th><th class="n">Puntuación</th>
-    <th class="n">Precio de la lista</th><th class="n">Máximo</th><th>Resultado</th></tr></thead><tbody>
+    <th class="n">Precio de la lista</th><th class="n" title="Desde la hora de la lista, durante 10 días">Mínimo</th>
+    <th class="n" title="Desde la hora de la lista, durante 10 días">Máximo</th><th>Resultado</th></tr></thead><tbody>
     ${mostradas.map((m, i) => {
       const r = resultados[i];
       return `<tr data-i="${i}"${r && r.dias ? ' class="llego"' : ""}>
         <td><a href="${enlace(m)}" target="_blank" rel="noopener">${esc(m.moneda)}</a>${conEstrella(datos, d.fecha, m)}</td>
         <td class="n">${puntos(m.puntuacion)}</td><td class="n">${precio(r ? r.ref : m.precio)}</td>
+        <td class="n ${clase(r && r.pctMin)}">${pct(r && r.pctMin)}</td>
         <td class="n ${clase(r && r.pctMax)}">${pct(r && r.pctMax)}</td><td>${resultadoTexto(r)}</td></tr>`;
     }).join("")}</tbody></table></div>`;
-  filasQueAbren(el, mostradas.map((m, i) => ({m, dia: d.fecha, ref: resultados[i] ? resultados[i].ref : m.precio})));
+  filasQueAbren(el, mostradas.map((m, i) => ({m, dia: d.fecha, hora: d.hora, ref: resultados[i] ? resultados[i].ref : m.precio})));
 }
 
 async function pintarHoy(datos) {
@@ -501,7 +600,8 @@ async function pintarHoy(datos) {
   if (!mostradas.length) {
     html += `<div class="vacio">En esta lista la red no muestra ninguna moneda: ninguna de las ${hoy.monedas.length} candidatas pasó el umbral.</div>`;
   } else {
-    html += `<div class="tarjetas" id="tarjetas-hoy">${mostradas.map((m) => tarjeta(datos, hoy.fecha, m, null)).join("")}</div>`;
+    html += `<div class="graficos-tf">Velas de los gráficos: <span class="tfs" id="tfs-hoy" role="group" aria-label="Temporalidad de las velas"></span></div>
+      <div class="tarjetas" id="tarjetas-hoy">${mostradas.map((m) => tarjeta(datos, hoy.fecha, m, null)).join("")}</div>`;
   }
   html += `<details><summary>Ver todas las candidatas del día, ordenadas por puntuación (pulsa una para ver su gráfico)</summary>
     <div id="candidatas-hoy"></div></details>
@@ -509,14 +609,15 @@ async function pintarHoy(datos) {
   caja.innerHTML = html;
   tablaCandidatas(datos, hoy, $("candidatas-hoy"));
   if (mostradas.length) {
+    botonesTemporalidad($("tfs-hoy"), redibujarMinis);
     // Primero las tarjetas sin precios en vivo; cuando llegan, otra vez y con su gráfico.
     const pintar = (vivos, conGrafico) => {
       const contenedor = $("tarjetas-hoy");
       contenedor.innerHTML = mostradas.map((m, i) => tarjeta(datos, hoy.fecha, m, vivos[i])).join("");
       if (!conGrafico) return;
-      const lista = mostradas.map((m, i) => ({m, dia: hoy.fecha, ref: vivos[i] ? vivos[i].ref : m.precio}));
+      const lista = mostradas.map((m, i) => ({m, dia: hoy.fecha, hora: hoy.hora, ref: vivos[i] ? vivos[i].ref : m.precio}));
       contenedor.querySelectorAll(".grafico-mini").forEach((el, i) => {
-        miniGrafico(el, mostradas[i], hoy.fecha, lista[i].ref);
+        miniGrafico(el, mostradas[i], lista[i]);
         el.addEventListener("click", () => abrirVisor(lista, i));
       });
     };
@@ -598,8 +699,8 @@ function pintarComo(datos) {
       puntuación pasa el umbral
       ${m.umbral == null ? "(ahora no hay umbral: ninguno llegó a 3 de cada 10 en las pruebas, así que no muestra ninguna)"
         : `(${puntos(m.umbral)}): el más bajo con el que, en las pruebas con días pasados, al menos 3 de cada 10 llegaron a +50 %`}.</p>
-    <p class="nota">GitHub lanza el cálculo con retraso (suele ser entre las 19:30 y las 00:00 hora Lima), así que cada
-      lista lleva la hora en que se calculó y su resultado se mide desde esa hora y el precio de ese momento.</p>
+    <p class="nota">El cálculo se lanza a las 19:30 hora Lima; si un día sale más tarde, la lista lleva la hora en que
+      se calculó y su resultado (mínimo, máximo y si llegó a +50 %) se mide desde esa hora y el precio de ese momento.</p>
     <p class="nota">En la validación (${m.tramos ? `${fecha(m.tramos.validacion[0])} de ${m.tramos.validacion[0].slice(0, 4)} a ${fecha(m.tramos.validacion[1])} de ${m.tramos.validacion[1].slice(0, 4)}` : ""})
       ${parte(m.validacion)}. Con tus listas reales ${parte(m.prueba)}.
       <a href="${informe}" target="_blank" rel="noopener">Informe completo</a>.</p>`;

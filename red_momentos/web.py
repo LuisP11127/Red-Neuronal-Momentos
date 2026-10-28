@@ -5,13 +5,13 @@
 Escribe ``sitio/index.html`` y ``sitio/datos.json`` con:
 
 - las predicciones de cada día (``predicciones/*.json``, sin las señales);
-- el resultado a 10 días de cada candidata de esas listas, medido desde la hora y el precio de la lista
-  (``predicciones/resultados.csv``; si aún no terminó, hasta dónde va);
+- el resultado a 10 días de cada candidata de esas listas (mínimo, máximo y si llegó a +50 %), medido desde la
+  hora y el precio de la lista (``predicciones/resultados.csv``; si aún no terminó, hasta dónde va);
 - las estrellas de cada día, de las listas copiadas (la red no las usa: se muestran al lado);
 - el resumen del informe de la red (``modelo/red.json``).
 
-La página pide a Binance, desde el navegador, el precio actual y el máximo desde la hora de la lista de las
-monedas de los últimos 10 días.
+La página pide a Binance, desde el navegador, el precio actual, el mínimo y el máximo desde la hora de la lista de
+las monedas de los últimos 10 días, y las velas de los gráficos (de 1h a 1D).
 """
 
 from __future__ import annotations
@@ -71,7 +71,8 @@ def construir(destino: Path, predicciones: Path = PREDICCIONES, resultados_csv: 
     for (fecha, nombre), fila in aciertos.leer_csv(resultados_csv).items():
         if (fecha, nombre) in predichas:
             resultados[f"{fecha}|{nombre}"] = {"estado": fila["estado"], "referencia": fila["precio"],
-                                               **{k: fila[k] for k in ("pct_maximo", "dias_hasta_50", "dias_vistos")}}
+                                               **{k: fila[k] for k in ("pct_maximo", "pct_minimo", "dias_hasta_50",
+                                                                         "dias_vistos")}}
     datos = {"generado": (ahora or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ"),
              "dias": dias, "resultados": resultados, "estrellas": estrellas(raiz_listas), "modelo": _modelo(modelo)}
     destino.mkdir(parents=True, exist_ok=True)

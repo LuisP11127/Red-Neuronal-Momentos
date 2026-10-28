@@ -162,31 +162,36 @@ señales también son de las 19:30.
 `python -m red_momentos.web sitio` genera la página (la publica el workflow **Web**). Tiene dos pestañas (recuerda la última elegida; `…/#historial` abre el historial):
 
 - **Hoy**
-  - **Lista del día:** solo las monedas que pasan el umbral, cada una con su puntuación, el precio de las
-    lista, el precio actual, el máximo desde la lista, si ya llegó a +50 % y su gráfico. Si ninguna pasa el
-    umbral, lo dice y no muestra nada. Debajo, «Ver todas las candidatas del día», ordenadas por puntuación.
+  - **Lista del día:** solo las monedas que pasan el umbral, cada una con su puntuación, el precio de la
+    lista, el precio actual, el mínimo y el máximo desde la lista, si ya llegó a +50 % y su gráfico. Si
+    ninguna pasa el umbral, lo dice y no muestra nada. Debajo, «Ver todas las candidatas del día», ordenadas
+    por puntuación.
   - **Cómo decide:** el umbral y los resultados de la red en la validación y con tus listas reales.
 - **Historial**
   - Arriba, cuántos días hay, en cuántos mostró monedas la red, cuántas de las que mostró llegaron a +50 % y
     cuántas llegaron entre todas las candidatas de esos días, para comparar.
   - Un apartado por día (el más reciente abierto; cada uno se dibuja al abrirlo) con **lo que mostró la red**
     y su resultado a 10 días (o, si no mostró ninguna, cuál fue la mejor puntuada) y **todas las candidatas**
-    ordenadas por puntuación, con cuáles mostró, el máximo desde la lista y el resultado de cada una (de
-    `predicciones/resultados.csv`, que se actualiza cada día). Verde si llegó a +50 %.
+    ordenadas por puntuación, con cuáles mostró, el mínimo y el máximo desde la lista y el resultado de cada
+    una (de `predicciones/resultados.csv`, que se actualiza cada día). Verde si llegó a +50 %.
 
 En las dos pestañas:
 
 - **Tus estrellas** (★) al lado de cada moneda; la red no las usa.
-- **Gráficos de velas 1D** (las diarias de Binance, que abren a las 00:00 UTC; se ven en hora Lima, así que
-  la vela del día de la lista lleva su fecha) con **todo el historial del par**: la página pide 1000 velas por
-  petición y sigue hacia atrás hasta la primera vela que tiene Binance. Llevan MA(7), MA(25) y MA(99) con los
-  colores de Binance, una flecha en la vela del día de la lista y líneas en el precio de la lista y en su
-  +50 %. Las monedas que muestra la red tienen su gráfico en la tarjeta; cualquier moneda de las tablas se
-  abre a pantalla completa (rueda o pellizco para acercar, `←` / `→` para pasar de moneda, `0` para ver todo
-  el historial, `Esc` para cerrar), con el volumen y los valores de cada vela al pasar el ratón. Las flechas
-  pasan a la moneda siguiente del mismo día y de la misma tabla.
+- **Gráficos de velas de 1h, 2h, 4h, 8h, 12h o 1D** (1D por defecto; la temporalidad elegida vale para todos
+  los gráficos y se recuerda). Se ven en hora Lima: la vela 1D de Binance abre a las 00:00 UTC (19:00 en
+  Lima), así que la del día de la lista lleva su fecha. Llevan MA(7), MA(25) y MA(99) con los colores de
+  Binance, una flecha «Lista» (en 1D, en la vela del día de la lista; en las demás, en la vela de la hora en
+  que se calculó) y líneas en el precio de la lista y en su +50 %. Las monedas que muestra la red tienen su
+  gráfico en la tarjeta, con las 1000 velas más recientes; cualquier moneda de las tablas se abre a pantalla
+  completa (rueda o pellizco para acercar, `←` / `→` para pasar de moneda, `0` para ver todo el historial,
+  `Esc` para cerrar), con el volumen y los valores de cada vela al pasar el ratón. Las flechas pasan a la
+  moneda siguiente del mismo día y de la misma tabla. A pantalla completa el gráfico abre con las 1000 velas
+  más recientes y, mientras está abierto, sigue cargando hacia atrás (1000 por petición, sin mover lo que se
+  ve) hasta la primera vela que tiene Binance o hasta 100 000 velas; el pie dice cuántas hay. Con 1h, un par
+  de 2017 tiene unas 80 000.
 
-Los precios, el máximo de los últimos 10 días y las velas los pide la página a Binance desde tu navegador
+Los precios, el mínimo y el máximo de los últimos 10 días y las velas los pide la página a Binance desde tu navegador
 (`api.binance.com` y `fapi.binance.com`).
 
 ## Workflows de GitHub
