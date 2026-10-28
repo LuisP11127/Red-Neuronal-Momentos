@@ -144,8 +144,10 @@ vacías. Como cada predicción guarda sus señales, se pueden comparar con las d
 misma moneda cuando se publiquen. Si el día ya tiene predicción no se repite, así conserva el precio de la
 primera.
 
-**La hora real.** GitHub lanza el workflow con retraso (se han visto más de cuatro horas: la lista del 22 de
-octubre se calculó a las 23:54 hora Lima). La lista sale igual y guarda la hora en que se calculó.
+**La hora real.** Con su horario, GitHub lanzaba el workflow con retraso (se vieron más de cuatro horas: la
+lista del 22 de octubre se calculó a las 23:54 hora Lima). Ahora lo lanza a las 19:30 el reloj de Cloudflare
+(ver [Workflows de GitHub](#workflows-de-github)), pero si un día falla, la lista sale igual con el horario de
+GitHub, y cada lista guarda la hora en que se calculó.
 `python -m red_momentos.aciertos` (el paso siguiente del **Diario**) mide cada lista **desde esa hora y el
 precio de ese momento**, no desde las 19:30, para no contar como acierto una subida que pasó antes de que la
 red diera su lista: el máximo de los 10 días siguientes llega a +50 % sobre ese precio, con velas de 15
@@ -160,38 +162,43 @@ señales también son de las 19:30.
 `python -m red_momentos.web sitio` genera la página (la publica el workflow **Web**). Tiene dos pestañas (recuerda la última elegida; `…/#historial` abre el historial):
 
 - **Hoy**
-  - **Lista del día:** solo las monedas que pasan el umbral, cada una con su puntuación, el precio de las
-    lista, el precio actual, el máximo desde la lista, si ya llegó a +50 % y su gráfico. Si ninguna pasa el
-    umbral, lo dice y no muestra nada. Debajo, «Ver todas las candidatas del día», ordenadas por puntuación.
+  - **Lista del día:** solo las monedas que pasan el umbral, cada una con su puntuación, el precio de la
+    lista, el precio actual, el mínimo y el máximo desde la lista, si ya llegó a +50 % y su gráfico. Si
+    ninguna pasa el umbral, lo dice y no muestra nada. Debajo, «Ver todas las candidatas del día», ordenadas
+    por puntuación.
   - **Cómo decide:** el umbral y los resultados de la red en la validación y con tus listas reales.
 - **Historial**
   - Arriba, cuántos días hay, en cuántos mostró monedas la red, cuántas de las que mostró llegaron a +50 % y
     cuántas llegaron entre todas las candidatas de esos días, para comparar.
   - Un apartado por día (el más reciente abierto; cada uno se dibuja al abrirlo) con **lo que mostró la red**
     y su resultado a 10 días (o, si no mostró ninguna, cuál fue la mejor puntuada) y **todas las candidatas**
-    ordenadas por puntuación, con cuáles mostró, el máximo desde la lista y el resultado de cada una (de
-    `predicciones/resultados.csv`, que se actualiza cada día). Verde si llegó a +50 %.
+    ordenadas por puntuación, con cuáles mostró, el mínimo y el máximo desde la lista y el resultado de cada
+    una (de `predicciones/resultados.csv`, que se actualiza cada día). Verde si llegó a +50 %.
 
 En las dos pestañas:
 
 - **Tus estrellas** (★) al lado de cada moneda; la red no las usa.
-- **Gráficos de velas 1D** (las diarias de Binance, que abren a las 00:00 UTC; se ven en hora Lima, así que
-  la vela del día de la lista lleva su fecha) con **todo el historial del par**: la página pide 1000 velas por
-  petición y sigue hacia atrás hasta la primera vela que tiene Binance. Llevan MA(7), MA(25) y MA(99) con los
-  colores de Binance, una flecha en la vela del día de la lista y líneas en el precio de la lista y en su
-  +50 %. Las monedas que muestra la red tienen su gráfico en la tarjeta; cualquier moneda de las tablas se
-  abre a pantalla completa (rueda o pellizco para acercar, `←` / `→` para pasar de moneda, `0` para ver todo
-  el historial, `Esc` para cerrar), con el volumen y los valores de cada vela al pasar el ratón. Las flechas
-  pasan a la moneda siguiente del mismo día y de la misma tabla.
+- **Gráficos de velas de 1h, 2h, 4h, 8h, 12h o 1D** (1D por defecto; la temporalidad elegida vale para todos
+  los gráficos y se recuerda). Se ven en hora Lima: la vela 1D de Binance abre a las 00:00 UTC (19:00 en
+  Lima), así que la del día de la lista lleva su fecha. Llevan MA(7), MA(25) y MA(99) con los colores de
+  Binance, una flecha «Lista» (en 1D, en la vela del día de la lista; en las demás, en la vela de la hora en
+  que se calculó) y líneas en el precio de la lista y en su +50 %. Las monedas que muestra la red tienen su
+  gráfico en la tarjeta, con las 1000 velas más recientes; cualquier moneda de las tablas se abre a pantalla
+  completa (rueda o pellizco para acercar, `←` / `→` para pasar de moneda, `0` para ver todo el historial,
+  `Esc` para cerrar), con el volumen y los valores de cada vela al pasar el ratón. Las flechas pasan a la
+  moneda siguiente del mismo día y de la misma tabla. A pantalla completa el gráfico abre con las 1000 velas
+  más recientes y, mientras está abierto, sigue cargando hacia atrás (1000 por petición, sin mover lo que se
+  ve) hasta la primera vela que tiene Binance o hasta 100 000 velas; el pie dice cuántas hay. Con 1h, un par
+  de 2017 tiene unas 80 000.
 
-Los precios, el máximo de los últimos 10 días y las velas los pide la página a Binance desde tu navegador
+Los precios, el mínimo y el máximo de los últimos 10 días y las velas los pide la página a Binance desde tu navegador
 (`api.binance.com` y `fapi.binance.com`).
 
 ## Workflows de GitHub
 
 | Workflow | Cuándo | Qué hace |
 |---|---|---|
-| **Diario** (`diario.yml`) | Programado a las 00:30 UTC (19:30 hora Lima; GitHub suele lanzarlo horas después) y a mano en **Actions → Diario → Run workflow**. | Copia las tres listas, da la lista de la red, mide las listas anteriores, calcula las etiquetas y las señales y guarda los cambios en `datos/` y `predicciones/`. El resumen de la ejecución trae la tabla de cuántas llegaron a +50 %. |
+| **Diario** (`diario.yml`) | Cada día a las 00:30 UTC (19:30 hora Lima), lanzado por un Worker de Cloudflare (ver abajo); el horario de GitHub queda de respaldo. También a mano en **Actions → Diario → Run workflow**. | Copia las tres listas, da la lista de la red, mide las listas anteriores, calcula las etiquetas y las señales y guarda los cambios en `datos/` y `predicciones/`. El resumen de la ejecución trae la tabla de cuántas llegaron a +50 %. |
 | **Entrenar** (`entrenar.yml`) | Cada lunes a las 01:07 UTC y a mano. | Entrena la red y guarda `modelo/`. El informe sale en el resumen de la ejecución. |
 | **Reconstrucción** (`reconstruccion.yml`) | Solo a mano. | Rehace `datos/reconstruccion/filas.csv.gz`. La primera vez tarda unas 2-3 horas; lo descargado queda en la caché de Actions. |
 | **Web** (`web.yml`) | Tras cada Diario, Entrenar y Reconstrucción, cada cambio en `main` y a mano. | Publica la web en GitHub Pages. |
@@ -200,6 +207,16 @@ Los precios, el máximo de los últimos 10 días y las velas los pide la página
 GitHub solo ejecuta los workflows programados desde la rama principal, así que **Diario** y **Entrenar**
 empiezan a correr solo cuando este código está en `main`. Para que **Web** publique la página, GitHub Pages
 tiene que estar activado con **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+### El reloj de Cloudflare
+
+GitHub ejecuta los workflows programados con horas de retraso: el Diario de las 19:30 salía entre las 23:30
+y la 01:00 hora Lima. Los que se lanzan a mano arrancan en segundos, así que un Worker de Cloudflare
+(`reloj-red-neuronal-momentos`, código en [`cloudflare/reloj.js`](cloudflare/reloj.js)) lanza el Diario cada
+día a las **00:30 UTC** con la API de GitHub. En la prueba, GitHub lo arrancó 15 segundos después. El horario
+de `diario.yml` sigue de respaldo: si un día el Worker falla, la lista sale igual, más tarde. Usa una clave de
+GitHub guardada como secreto del Worker; cuando caduque hay que poner otra (ver
+[`cloudflare/README.md`](cloudflare/README.md)).
 
 ### Binance
 

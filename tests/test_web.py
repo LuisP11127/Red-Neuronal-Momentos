@@ -26,7 +26,7 @@ def test_construir(tmp_path):
     resultados_csv = tmp_path / "resultados.csv"
     resultados_csv.write_text("fecha,moneda,mercado,simbolo,mostrada,hora,precio,maximo,pct_maximo,minimo,pct_minimo,"
                               "dias_hasta_50,dias_vistos,estado\n"
-                              "2026-10-20,PEPE,futures,1000PEPEUSDT,1,2026-10-22T00:31:00Z,0.01,0.01125,12.5,,,,3,pendiente\n"
+                              "2026-10-20,PEPE,futures,1000PEPEUSDT,1,2026-10-22T00:31:00Z,0.01,0.01125,12.5,0.0095,-5,,3,pendiente\n"
                               "2026-10-20,SOL,spot,SOLUSDT,0,2026-10-22T00:31:00Z,100,103,3,,,,10,no_llego\n", encoding="utf-8")
     destino = tmp_path / "sitio"
     datos = web.construir(destino, predicciones, resultados_csv, tmp_path / "no-hay-modelo.json", listas,
@@ -36,7 +36,7 @@ def test_construir(tmp_path):
     assert datos["estrellas"] == ["2026-10-20|ARB", "2026-10-20|PEPE"]
     assert set(datos["resultados"]) == {"2026-10-20|PEPE"}  # solo las monedas predichas
     assert datos["resultados"]["2026-10-20|PEPE"] == {"estado": "pendiente", "referencia": "0.01", "pct_maximo": "12.5",
-                                                     "dias_hasta_50": "", "dias_vistos": "3"}
+                                                     "pct_minimo": "-5", "dias_hasta_50": "", "dias_vistos": "3"}
     assert datos["modelo"] is None
     assert json.loads((destino / "datos.json").read_text(encoding="utf-8")) == datos
     assert "<title>Red-Neuronal-Momentos</title>" in (destino / "index.html").read_text(encoding="utf-8")
