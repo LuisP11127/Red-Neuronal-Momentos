@@ -53,7 +53,8 @@ def _modelo(ruta: Path) -> Optional[dict]:
     datos = json.loads(ruta.read_text(encoding="utf-8"))
     informe = datos.get("informe", {})
     evaluacion = informe.get("evaluacion", {})
-    return {"umbral": datos.get("umbral"), "tramos": informe.get("tramos"),
+    return {"umbral": datos.get("umbral"), "tramos": informe.get("tramos"), "entrenada": informe.get("entrenada"),
+            "datos_hasta": informe.get("datos_hasta"),
             "validacion": evaluacion.get("validacion"), "prueba": evaluacion.get("prueba: listas reales")}
 
 

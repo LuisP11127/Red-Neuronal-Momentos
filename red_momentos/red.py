@@ -28,6 +28,10 @@ extremos no pesan de más; un dato que falta queda en 0,5 y lo marca su indicado
 **Umbral.** La red muestra una moneda si su puntuación supera el umbral más bajo con el que, en la
 validación, al menos 3 de cada 10 monedas llegaron a +50 %. Si ninguno lo consigue, no muestra nada.
 
+**Red final.** Elegidas la configuración y el umbral, la red que se usa cada día se vuelve a entrenar con todo lo
+que ya tiene resultado (también la validación y la prueba, con las listas reales), así aprende de los últimos
+resultados cada vez que se entrena. Las cifras del informe son las de la red que no había visto esos días.
+
 **Comparación.** Una regresión logística con las mismas señales y elegir al azar (la proporción de
 candidatas que llegan a +50 %).
 
@@ -47,7 +51,7 @@ import math
 import sys
 import warnings
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -99,15 +103,18 @@ def _valor(texto: str) -> float:
     return float(texto) if texto not in ("", None) else math.nan
 
 
-def matriz(filas: list[dict]) -> np.ndarray:
-    """Las entradas de la red (``ENTRADAS``) de cada fila con señales (strings del CSV)."""
+def matriz(filas: list[dict], entradas: Optional[list[str]] = None) -> np.ndarray:
+    """Las entradas de la red de cada fila con señales (strings del CSV): ``ENTRADAS`` o, al puntuar con un modelo
+    guardado, las suyas (``Red.entradas``), así un modelo entrenado con otras señales sigue funcionando."""
+    entradas = ENTRADAS if entradas is None else entradas
     x = np.array([[_valor(f.get(k, "")) for k in senales.SENALES] for f in filas], dtype=float).reshape(-1, len(senales.SENALES))
     libro = [senales.SENALES.index(k) for k in senales.LIBRO if k not in EXCLUIDAS]
     tiene_libro = (~np.isnan(x[:, libro])).any(axis=1)
     tiene_metricas = (~np.isnan(x[:, [senales.SENALES.index(k) for k in senales.METRICAS]])).any(axis=1)
     es_futuros = np.array([f["mercado"] == "futures" for f in filas], dtype=bool)
-    columnas = [senales.SENALES.index(k) for k in ENTRADAS if k not in INDICADORES]
-    return np.hstack([x[:, columnas], np.column_stack([tiene_libro, tiene_metricas, es_futuros]).astype(float)])
+    indicadores = {"tiene_libro": tiene_libro, "tiene_metricas": tiene_metricas, "es_futuros": es_futuros}
+    return np.column_stack([indicadores[k].astype(float) if k in indicadores else x[:, senales.SENALES.index(k)]
+                            for k in entradas]).reshape(len(filas), len(entradas))
 
 
 def a_datos(filas: list[dict]) -> Datos:
@@ -352,7 +359,19 @@ def entrenar(reconstruccion: Datos, reales: Datos) -> tuple[Red, dict]:
             "umbral": resumen_umbral(datos, p, red.umbral),
         }
     informe["importancias"] = [[n, round(v, 4)] for n, v in importancias(red, valid)[:15]]
-    return red, informe
+
+    # La red que se usa cada día se vuelve a entrenar, con la misma configuración, con todo lo que ya tiene resultado
+    # (también los días de la validación y de la prueba, con tus listas reales): así aprende de los últimos
+    # resultados. En pruebas con cinco cortes desde 2025, la mejor moneda de cada día y el 2 % mejor puntuado
+    # acertaron más que con la red que se deja fuera los últimos ~170 días. Las cifras del informe siguen siendo
+    # las de la red que no había visto esos días, y el umbral, el elegido en la validación.
+    todo = unir(reconstruccion, reales)
+    final = entrenar_red(todo.x, todo.y, configuracion)
+    final.umbral = red.umbral
+    informe["datos_hasta"] = todo.fechas.max().astype(date).isoformat()
+    informe["filas_red_final"] = len(todo)
+    informe["entrenada"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return final, informe
 
 
 def _pct(v: float) -> str:
@@ -375,10 +394,14 @@ def informe_markdown(informe: dict) -> str:
               "- Umbral: " + (f"{informe['umbral']:.3f} (al menos 3 de cada 10 llegaron en la validación)."
                               if informe["umbral"] is not None else
                               "ninguno: en la validación ningún umbral llegó a 3 de cada 10, así que la red no "
-                              "muestra monedas."), "",
-              "| Tramo | Filas | Llegaron | Al azar | AUC red | AUC logística | Mejor del día (red) | "
-              "Mostradas | Llegaron de las mostradas | Días con lista |",
-              "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+                              "muestra monedas.")]
+    if informe.get("datos_hasta"):
+        lineas.append(f"- Red que se usa cada día: la misma configuración, entrenada otra vez con todo lo que ya tiene "
+                      f"resultado (hasta el {informe['datos_hasta']}, {informe['filas_red_final']} filas). Las cifras de "
+                      f"abajo son las de la red que no había visto la validación ni la prueba.")
+    lineas += ["", "| Tramo | Filas | Llegaron | Al azar | AUC red | AUC logística | Mejor del día (red) | "
+               "Mostradas | Llegaron de las mostradas | Días con lista |",
+               "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for nombre, e in informe["evaluacion"].items():
         u = e["umbral"]
         lineas.append(f"| {nombre} | {e['filas']} | {e['llegaron']} ({e['monedas_que_llegaron']} monedas) | "

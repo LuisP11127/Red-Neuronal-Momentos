@@ -128,7 +128,7 @@ def predecir(fecha: date, binance: Binance, modelo: red.Red, ahora: datetime,
 
     calculadas = senales.calcular(filas, senales.en_que_listas(todas), velas, primeras, ahora,
                                   FuturosEnVivo(binance, ahora), hilos=8, en_vivo=True)
-    puntos = modelo.puntuar(red.matriz(calculadas)) if calculadas else []
+    puntos = modelo.puntuar(red.matriz(calculadas, modelo.entradas)) if calculadas else []
     monedas = []
     for c, fila, p in zip(del_dia, calculadas, puntos):
         monedas.append({

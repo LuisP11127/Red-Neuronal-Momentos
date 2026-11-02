@@ -107,5 +107,10 @@ def test_entrenar_de_punta_a_punta():
     assert informe["importancias"][0][0] == "vol_rel_1d"
     texto = red.informe_markdown(informe)
     assert "| prueba: listas reales |" in texto and "vol_rel_1d" in texto
+    # La red que se usa se vuelve a entrenar con todo lo que tiene resultado (también la prueba), con el mismo umbral.
+    hasta = max(recon.fechas.max(), reales.fechas.max()).astype(date).isoformat()
+    assert informe["datos_hasta"] == hasta and informe["filas_red_final"] == len(red.unir(recon, reales))
+    assert modelo.umbral == informe["umbral"] and "Red que se usa cada día" in texto
+    assert informe["entrenada"].endswith("Z")
     if modelo.umbral is not None:
         assert ev["validacion"]["umbral"]["precision"] >= red.PRECISION_MINIMA - 1e-9
