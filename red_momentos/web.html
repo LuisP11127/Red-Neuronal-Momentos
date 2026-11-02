@@ -81,7 +81,12 @@
                      cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .pestanas button[aria-selected="true"] { color: var(--texto); border-bottom-color: var(--acento); }
   details.dia h3 { font-size: .95rem; margin: 12px 0 6px; }
-  h3.seccion { font-size: 1rem; margin: 24px 0 4px; }
+  .seg { display: inline-flex; padding: 2px; gap: 2px; margin: 10px 0 4px; background: var(--tarjeta);
+         border: 1px solid var(--borde); border-radius: 7px; }
+  .seg button { font: inherit; font-size: .9rem; border: 0; background: transparent; color: var(--suave);
+                padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: 500; }
+  .seg button[aria-pressed="true"] { background: var(--texto); color: var(--tarjeta); }
+  .seg .count { font-size: .78rem; opacity: .8; margin-left: 5px; font-variant-numeric: tabular-nums; }
   #llegaron .resumen { margin: 6px 0; }
   .tfs { display: inline-flex; gap: 2px; }
   .graficos-tf { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: .9rem; color: var(--suave); }
@@ -120,16 +125,19 @@
   <div id="pestana-historial" role="tabpanel" hidden>
     <h2>Historial</h2>
     <div id="resumen-historial" class="resumen"></div>
-    <h3 class="seccion">Llegaron a +50 %</h3>
-    <p class="nota">Las candidatas de todos los días que llegaron a +50 % en los 10 días siguientes a su lista, de la
-      lista más reciente a la más antigua. Una moneda que salió en varias listas aparece una vez por lista. Pulsa una
-      para ver su gráfico.</p>
-    <div id="llegaron"></div>
-    <h3 class="seccion">Por día</h3>
-    <p class="nota">Un apartado por día: lo que mostró la red y todas las candidatas de Momento-A y Momento-B, ordenadas por
-      su puntuación. El resultado se mide desde la hora y el precio en que la red calculó la lista hasta 10 días después
-      y se actualiza cada día; si llegó a +50 %, la fila se pinta de verde. Pulsa una moneda para ver su gráfico.</p>
-    <div id="historial"></div>
+    <div class="seg" id="vista-historial" role="group" aria-label="Vista del historial"></div>
+    <div id="vista-dias">
+      <p class="nota">Un apartado por día: lo que mostró la red y todas las candidatas de Momento-A y Momento-B, ordenadas por
+        su puntuación. El resultado se mide desde la hora y el precio en que la red calculó la lista hasta 10 días después
+        y se actualiza cada día; si llegó a +50 %, la fila se pinta de verde. Pulsa una moneda para ver su gráfico.</p>
+      <div id="historial"></div>
+    </div>
+    <div id="vista-50" hidden>
+      <p class="nota">Las candidatas de todos los días que llegaron a +50 % en los 10 días siguientes a su lista, de la
+        lista más reciente a la más antigua. Una moneda que salió en varias listas aparece una vez por lista. Pulsa una
+        para ver su gráfico.</p>
+      <div id="llegaron"></div>
+    </div>
   </div>
 
   <footer>Precios de Binance pedidos desde tu navegador. Esto es una herramienta de filtrado, no una recomendación de inversión.</footer>
@@ -636,7 +644,7 @@ function tablaLlegaron(datos, el) {
     .sort((a, b) => b.r.pctMax - a.r.pctMax));
   if (!filas.length) {
     el.innerHTML = `<p class="nota">Todavía ninguna candidata llegó a +50 %.</p>`;
-    return;
+    return 0;
   }
   const mostradas = filas.filter(({m}) => m.mostrar).length;
   const n = filas.length;
@@ -657,6 +665,27 @@ function tablaLlegaron(datos, el) {
   const lista = filas.map(({d, m, r}) => ({m, dia: d.fecha, hora: d.hora, ref: r.ref}));
   filasQueAbren(el, lista);
   ponerVariaciones(el, lista);
+  return n;
+}
+
+// Vista del historial: «Por día» o «Llegaron a +50 %», con cuántas llegaron (se recuerda la última elegida).
+let vistaHistorial = "dias";
+try { if (localStorage.getItem("vista-historial") === "50") vistaHistorial = "50"; } catch (e) { /* sin almacenamiento */ }
+function botonesVista(llegaron) {
+  const seg = $("vista-historial");
+  seg.innerHTML = [["dias", "Por día", null], ["50", "Llegaron a +50 %", llegaron]].map(([k, nombre, n]) =>
+    `<button type="button" data-vista="${k}">${nombre}${n == null ? "" : `<span class="count">${n}</span>`}</button>`).join("");
+  const mostrar = () => {
+    seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.vista === vistaHistorial)));
+    $("vista-dias").hidden = vistaHistorial !== "dias";
+    $("vista-50").hidden = vistaHistorial !== "50";
+  };
+  seg.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    vistaHistorial = b.dataset.vista;
+    try { localStorage.setItem("vista-historial", vistaHistorial); } catch (e) { /* sin almacenamiento */ }
+    mostrar();
+  }));
+  mostrar();
 }
 
 // Las monedas que mostró la red un día, con su resultado (en vivo si aún no terminó).
@@ -731,12 +760,11 @@ async function pintarHoy(datos) {
 // Historial: un apartado por día con lo que mostró la red y todas sus candidatas.
 function pintarHistorial(datos) {
   const caja = $("historial");
+  botonesVista(tablaLlegaron(datos, $("llegaron")));
   if (!datos.dias.length) {
     caja.innerHTML = `<div class="vacio">Todavía no hay listas de la red.</div>`;
-    $("llegaron").innerHTML = "";
     return;
   }
-  tablaLlegaron(datos, $("llegaron"));
   apartadosPorDia(caja, datos.dias, (d) => {
     const mostradas = d.monedas.filter((m) => m.mostrar);
     const finales = d.monedas.map((m) => [m, resultadoGuardado(datos, d.fecha, m)]).filter(([, r]) => r && r.final);
