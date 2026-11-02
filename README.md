@@ -180,6 +180,10 @@ señales también son de las 19:30.
 - **Historial**
   - Arriba, cuántos días hay, en cuántos mostró monedas la red, cuántas de las que mostró llegaron a +50 % y
     cuántas llegaron entre todas las candidatas de esos días, para comparar.
+  - **Llegaron a +50 %:** las candidatas de todos los días que llegaron a +50 % en los 10 días siguientes a su
+    lista (de `predicciones/resultados.csv`), de la lista más reciente a la más antigua, con su puntuación, si la
+    red la mostró, la variación, el mínimo, el máximo y en cuántos días llegó. Una moneda que salió en varias
+    listas aparece una vez por lista.
   - Un apartado por día (el más reciente abierto; cada uno se dibuja al abrirlo) con **lo que mostró la red**
     y su resultado a 10 días (o, si no mostró ninguna, cuál fue la mejor puntuada) y **todas las candidatas**
     ordenadas por puntuación, con cuáles mostró, el mínimo y el máximo desde la lista y el resultado de cada
