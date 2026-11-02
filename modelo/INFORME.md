@@ -5,6 +5,7 @@
 - Prueba: 2026-09-30 a 2026-10-28 (listas reales y, para comparar, la reconstrucción de esos días).
 - Red elegida: media de 5 redes con capas [64, 32], alpha 0.1 y 20 épocas.
 - Umbral: 0.353 (al menos 3 de cada 10 llegaron en la validación).
+- Red que se usa cada día: la misma configuración, entrenada otra vez con todo lo que ya tiene resultado (hasta el 2026-10-28, 183466 filas). Las cifras de abajo son las de la red que no había visto la validación ni la prueba.
 
 | Tramo | Filas | Llegaron | Al azar | AUC red | AUC logística | Mejor del día (red) | Mostradas | Llegaron de las mostradas | Días con lista |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
