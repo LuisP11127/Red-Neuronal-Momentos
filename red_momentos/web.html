@@ -163,6 +163,9 @@ const coma = (texto) => texto.replace(".", ",");
 const pct = (v) => v == null || isNaN(v) ? "—" : (v > 0 ? "+" : "") + coma(v.toFixed(1)) + " %";
 const clase = (v) => v == null || isNaN(v) ? "" : v >= 0 ? "sube" : "baja";
 const precio = (v) => v == null || isNaN(v) ? "—" : coma(v >= 1000 ? v.toFixed(2) : String(Number(v.toPrecision(5))));
+const volumenCorto = (v) => v == null || isNaN(v) ? "—"
+  : v >= 1e9 ? coma((v / 1e9).toFixed(2)) + " B" : v >= 1e6 ? coma((v / 1e6).toFixed(2)) + " M"
+  : v >= 1e3 ? coma((v / 1e3).toFixed(1)) + " K" : coma(v.toFixed(0));
 const puntos = (p) => coma((p * 100).toFixed(0)) + " %";
 
 
@@ -184,6 +187,7 @@ async function pedir(mercado, ruta) {
 
 // ---------- Gráficos: velas de Binance de 1h a 1D (la de 1D abre a las 00:00 UTC), con todo el historial ----------
 const MEDIAS = [7, 25, 99];
+const MEDIAS_VOLUMEN = [5, 25];  // sobre las barras de volumen del gráfico a pantalla completa, como en Binance
 const LIMA = -5 * 3600000;  // los gráficos se ven en hora Lima, como Binance en Perú
 const PAGINA = 1000;        // velas por petición (el máximo de spot)
 const MAX_VELAS = 100000;   // tope por gráfico: de 1h desde 2017 son unas 82 000
@@ -278,9 +282,11 @@ function dibujar(el, filas, item, grande, tf) {
                                            wickUpColor: c.sube, wickDownColor: c.baja, borderVisible: false});
   const lineas = MEDIAS.map((n, i) => chart.addLineSeries({color: c.medias[i], lineWidth: grande ? 2 : 1, priceLineVisible: false,
                                                            lastValueVisible: false, crosshairMarkerVisible: false, priceFormat: formato}));
-  let volumen = null;
+  let volumen = null, lineasVolumen = [];
   if (grande) {
     volumen = chart.addHistogramSeries({priceFormat: {type: "volume"}, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false});
+    lineasVolumen = MEDIAS_VOLUMEN.map((n, i) => chart.addLineSeries({color: c.medias[i], lineWidth: 1, priceScaleId: "vol",
+      priceFormat: {type: "volume"}, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false}));
     chart.priceScale("vol").applyOptions({scaleMargins: {top: 0.82, bottom: 0}});
   }
   if (item.ref) {
@@ -289,7 +295,7 @@ function dibujar(el, filas, item, grande, tf) {
     serie.createPriceLine({price: item.ref * 1.5, color: c.verde, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted,
                            axisLabelVisible: grande, title: grande ? "+50 %" : ""});
   }
-  const g = {chart, tf, filas: [], medias: [], indice: -1};
+  const g = {chart, tf, filas: [], medias: [], mediasVolumen: [], indice: -1};
   // Pone todas las velas; si llegan velas más antiguas por la izquierda, lo que se está viendo no se mueve.
   g.poner = (nuevas) => {
     const rango = g.filas.length ? chart.timeScale().getVisibleLogicalRange() : null;
@@ -303,7 +309,15 @@ function dibujar(el, filas, item, grande, tf) {
       lineas[i].setData(valores.flatMap((v, j) => (v == null ? [] : [{time: velas[j].time, value: v}])));
       return valores;
     });
-    if (volumen) volumen.setData(nuevas.map((f, i) => ({time: velas[i].time, value: f[5], color: (f[4] >= f[1] ? c.sube : c.baja) + "66"})));
+    if (volumen) {
+      volumen.setData(nuevas.map((f, i) => ({time: velas[i].time, value: f[5], color: (f[4] >= f[1] ? c.sube : c.baja) + "66"})));
+      const volumenes = nuevas.map((f) => f[5]);
+      g.mediasVolumen = MEDIAS_VOLUMEN.map((n, i) => {
+        const valores = sma(volumenes, n);
+        lineasVolumen[i].setData(valores.flatMap((v, j) => (v == null ? [] : [{time: velas[j].time, value: v}])));
+        return valores;
+      });
+    }
     g.indice = velaDeLaLista(nuevas, item, tf);
     serie.setMarkers(g.indice >= 0 ? [{time: velas[g.indice].time, position: "aboveBar", color: c.acento, shape: "arrowDown", text: grande ? "Lista" : ""}] : []);
     if (rango && anadidas > 0) chart.timeScale().setVisibleLogicalRange({from: rango.from + anadidas, to: rango.to + anadidas});
@@ -361,7 +375,9 @@ function leyenda(g, idx) {
   const c = colores();
   $("v-leyenda").innerHTML = `${momentoVela(f[0], g.tf)} · A <b>${precio(f[1])}</b> · Máx <b>${precio(f[2])}</b> · Mín <b>${precio(f[3])}</b>
     · C <b>${precio(f[4])}</b> · <span class="${clase(f[4] / f[1] - 1)}">${pct((f[4] / f[1] - 1) * 100)}</span> · `
-    + MEDIAS.map((n, i) => fila(`MA(${n})`, g.medias[i][idx], c.medias[i])).join(" · ");
+    + MEDIAS.map((n, i) => fila(`MA(${n})`, g.medias[i][idx], c.medias[i])).join(" · ")
+    + (g.mediasVolumen.length ? ` · Vol <b>${volumenCorto(f[5])}</b> · `
+      + MEDIAS_VOLUMEN.map((n, i) => `<span style="color:${c.medias[i]}">MA(${n}) <b>${volumenCorto(g.mediasVolumen[i][idx])}</b></span>`).join(" · ") : "");
 }
 
 function pie(g, h, cargando) {
