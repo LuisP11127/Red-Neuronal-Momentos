@@ -125,6 +125,11 @@ predice con numpy, así no depende de la versión de scikit-learn.
 - **Umbral:** muestra una moneda si su puntuación supera el umbral más bajo con el que, en la validación, al
   menos **3 de cada 10** llegaron a +50 % (con al menos 20 monedas sobre el umbral). Si ninguno lo consigue,
   no muestra nada.
+- **Red final:** elegidas la configuración y el umbral, la red que se usa cada día se vuelve a entrenar con todo lo
+  que ya tiene resultado (también los días de la validación y de la prueba, con tus listas reales). Así, cada vez
+  que se entrena aprende de las monedas que llegaron y las que no en los últimos días. En una prueba con cinco
+  cortes desde 2025, la mejor moneda de cada día y el 2 % mejor puntuado acertaron más que con la red que deja fuera
+  los últimos ~170 días. Las cifras del informe siguen siendo las de la red que no había visto esos días.
 - **Comparación:** una regresión logística con las mismas señales y elegir al azar.
 - La red no usa la banda de ±0,2 % del libro: Binance la publica solo desde enero de 2026 y la red
   aprendería la fecha y no la señal.
@@ -167,6 +172,11 @@ señales también son de las 19:30.
     ninguna pasa el umbral, lo dice y no muestra nada. Debajo, «Ver todas las candidatas del día», ordenadas
     por puntuación.
   - **Cómo decide:** el umbral y los resultados de la red en la validación y con tus listas reales.
+  - **Entrenar la red ahora:** lanza el workflow **Entrenar** sin esperar al lunes y muestra cómo va (y cuándo se
+    entrenó la red actual). Para lanzarlo desde la página hace falta una clave de GitHub *fine-grained* con acceso
+    solo a este repositorio y el permiso **Actions: Read and write**; se guarda solo en ese navegador y solo se envía
+    a `api.github.com`. Sin clave, el mismo botón explica cómo lanzarlo en **Actions → Entrenar → Run workflow**.
+    Al terminar, el workflow **Web** vuelve a publicar la página con la red nueva.
 - **Historial**
   - Arriba, cuántos días hay, en cuántos mostró monedas la red, cuántas de las que mostró llegaron a +50 % y
     cuántas llegaron entre todas las candidatas de esos días, para comparar.
@@ -201,7 +211,7 @@ Los precios, el mínimo y el máximo de los últimos 10 días y las velas los pi
 | Workflow | Cuándo | Qué hace |
 |---|---|---|
 | **Diario** (`diario.yml`) | Cada día a las 00:30 UTC (19:30 hora Lima), lanzado por un Worker de Cloudflare (ver abajo); el horario de GitHub queda de respaldo. También a mano en **Actions → Diario → Run workflow**. | Copia las tres listas, da la lista de la red, mide las listas anteriores, calcula las etiquetas y las señales y guarda los cambios en `datos/` y `predicciones/`. El resumen de la ejecución trae la tabla de cuántas llegaron a +50 %. |
-| **Entrenar** (`entrenar.yml`) | Cada lunes a las 01:07 UTC y a mano. | Entrena la red y guarda `modelo/`. El informe sale en el resumen de la ejecución. |
+| **Entrenar** (`entrenar.yml`) | Cada lunes a las 01:07 UTC, a mano y con el botón **Entrenar la red ahora** de la web. | Entrena la red y guarda `modelo/`. El informe sale en el resumen de la ejecución. |
 | **Reconstrucción** (`reconstruccion.yml`) | Solo a mano. | Rehace `datos/reconstruccion/filas.csv.gz`. La primera vez tarda unas 2-3 horas; lo descargado queda en la caché de Actions. |
 | **Web** (`web.yml`) | Tras cada Diario, Entrenar y Reconstrucción, cada cambio en `main` y a mano. | Publica la web en GitHub Pages. |
 | **Tests** (`tests.yml`) | En cada pull request y cambio en `main`. | Pasa las pruebas. |
@@ -226,6 +236,12 @@ Solo datos públicos, sin claves. Desde los servidores de GitHub (EE. UU.) `api.
 `fapi.binance.com` dan error 451, así que se usan `data-api.binance.vision` (spot) y `www.binance.com`
 (futuros), igual que en el escaneo diario de Scanner-pump. Si tampoco responden, las velas se leen de los
 archivos de `data.binance.vision`, que se publican al día siguiente hacia las 08:00 UTC.
+
+## Análisis
+
+- [MA(5) y MA(25) del volumen](analisis/volumen-ma5-ma25.md): si poco volumen varios días seguidos (MA(5) por
+  debajo de la MA(25)) anuncia una subida (no: con ese patrón suben menos monedas que de media), qué sí dicen
+  esas medias y por qué no se añadieron a la red.
 
 ## Línea de comandos
 

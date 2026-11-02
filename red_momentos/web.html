@@ -86,6 +86,16 @@
   .graficos-tf .tfs button { font: inherit; font-size: .85rem; padding: 3px 9px; border-radius: 6px; cursor: pointer;
                              border: 1px solid var(--borde); background: var(--tarjeta); color: var(--texto); }
   .tfs button[aria-pressed="true"] { border-color: var(--acento); color: var(--acento); font-weight: 600; }
+  .entrenar { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; padding: 14px; margin-top: 12px; }
+  .entrenar .fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .entrenar button, .entrenar input { font: inherit; font-size: .92rem; padding: 6px 12px; border-radius: 6px;
+                                      border: 1px solid var(--borde); background: var(--tarjeta); color: var(--texto); }
+  .entrenar button { cursor: pointer; }
+  .entrenar button.principal { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
+  .entrenar button:disabled { opacity: .6; cursor: default; }
+  .entrenar input { flex: 1 1 260px; min-width: 0; }
+  .entrenar form { margin-top: 10px; }
+  .entrenar p { margin: 8px 0 0; }
 </style>
 </head>
 <body>
@@ -102,6 +112,7 @@
     <section id="hoy"><p class="nota">Cargando…</p></section>
     <h2>Cómo decide</h2>
     <div id="como"></div>
+    <div id="entrenar" class="entrenar"></div>
   </div>
 
   <div id="pestana-historial" role="tabpanel" hidden>
@@ -740,8 +751,121 @@ function pintarComo(datos) {
       <a href="${informe}" target="_blank" rel="noopener">Informe completo</a>.</p>`;
 }
 
+// ---------- Entrenar la red desde la página ----------
+// Lanza el workflow «Entrenar» de GitHub Actions (el mismo que corre cada lunes). Para lanzarlo hace falta una
+// clave de GitHub con permiso para ejecutar workflows en este repositorio: se guarda solo en este navegador y
+// solo se envía a api.github.com. Ver cómo va no necesita clave (el repositorio es público).
+const REPO = "LuisP11127/Red-Neuronal-Momentos";
+const API_ENTRENAR = `https://api.github.com/repos/${REPO}/actions/workflows/entrenar.yml`;
+const WEB_ENTRENAR = `https://github.com/${REPO}/actions/workflows/entrenar.yml`;
+const entreno = {siguiendo: null, lanzado: 0};
+function claveGithub() { try { return localStorage.getItem("clave-github") || ""; } catch (e) { return ""; } }
+function guardarClaveGithub(clave) {
+  try { if (clave) localStorage.setItem("clave-github", clave); else localStorage.removeItem("clave-github"); } catch (e) { /* sin almacenamiento */ }
+}
+function github(ruta, opciones = {}) {
+  const headers = {Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"};
+  const clave = claveGithub();
+  if (clave) headers.Authorization = "Bearer " + clave;
+  if (opciones.body) headers["Content-Type"] = "application/json";
+  return fetch(API_ENTRENAR + ruta, {...opciones, headers, cache: "no-store"});
+}
+function pintarEntrenar(datos) {
+  const m = datos.modelo;
+  const red = m && m.entrenada
+    ? `La red actual se entrenó el ${horaLima(m.entrenada)}${m.datos_hasta ? ` con los resultados hasta el ${fecha(m.datos_hasta)}` : ""}.` : "";
+  $("entrenar").innerHTML = `
+    <div class="fila">
+      <button type="button" class="principal" id="entrenar-btn">Entrenar la red ahora</button>
+      <span id="entrenar-estado" class="nota">Consultando el último entrenamiento…</span>
+    </div>
+    <p class="nota">${red} Se entrena sola cada lunes; con el botón aprende ya de los últimos resultados (las monedas
+      que llegaron y las que no) y ajusta las puntuaciones. Tarda unos minutos y después la página se vuelve a publicar
+      con la red nueva.</p>
+    <form id="entrenar-clave" hidden>
+      <p class="nota">Para lanzarlo desde aquí, la página necesita una clave de GitHub. Créala en GitHub → Settings →
+        Developer settings → <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Fine-grained tokens</a>,
+        con acceso solo a <b>Red-Neuronal-Momentos</b> y el permiso <b>Actions: Read and write</b>. Se guarda solo en este
+        navegador. Sin clave, puedes lanzarlo en <a href="${WEB_ENTRENAR}" target="_blank" rel="noopener">Actions → Entrenar → Run workflow</a>.</p>
+      <div class="fila" style="margin-top: 8px">
+        <input type="password" id="entrenar-token" placeholder="github_pat_…" autocomplete="off" aria-label="Clave de GitHub">
+        <button type="submit">Guardar y entrenar</button>
+      </div>
+    </form>
+    <p class="nota" id="entrenar-olvidar"${claveGithub() ? "" : " hidden"}>Clave de GitHub guardada en este navegador.
+      <a href="#" id="entrenar-borrar">Olvidarla</a></p>`;
+  $("entrenar-btn").addEventListener("click", () => claveGithub() ? lanzarEntrenamiento() : mostrarFormClave(true));
+  $("entrenar-clave").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const clave = $("entrenar-token").value.trim();
+    if (!clave) return;
+    guardarClaveGithub(clave);
+    mostrarFormClave(false);
+    lanzarEntrenamiento();
+  });
+  $("entrenar-borrar").addEventListener("click", (e) => { e.preventDefault(); guardarClaveGithub(""); $("entrenar-olvidar").hidden = true; });
+  seguirEntrenamiento();
+}
+function mostrarFormClave(ver) {
+  $("entrenar-clave").hidden = !ver;
+  $("entrenar-olvidar").hidden = ver || !claveGithub();
+  if (ver) $("entrenar-token").focus();
+}
+function estadoEntrenar(html) { $("entrenar-estado").innerHTML = html; }
+async function lanzarEntrenamiento() {
+  const boton = $("entrenar-btn");
+  boton.disabled = true;
+  estadoEntrenar("Lanzando el entrenamiento…");
+  let r = null;
+  try { r = await github("/dispatches", {method: "POST", body: JSON.stringify({ref: "main"})}); } catch (e) { /* sin conexión */ }
+  if (r && r.status === 204) {
+    entreno.lanzado = Date.now();
+    estadoEntrenar("Entrenamiento lanzado; GitHub lo arranca en unos segundos…");
+    setTimeout(seguirEntrenamiento, 5000);
+    return;
+  }
+  boton.disabled = false;
+  const motivo = !r ? "no hay conexión con GitHub"
+    : r.status === 401 ? "la clave no es válida o caducó"
+    : r.status === 403 || r.status === 404 ? "la clave no tiene permiso (necesita «Actions: Read and write» en Red-Neuronal-Momentos)"
+    : `GitHub respondió ${r.status}`;
+  estadoEntrenar(`<span class="baja">No se pudo lanzar: ${motivo}.</span> <a href="${WEB_ENTRENAR}" target="_blank" rel="noopener">Lanzarlo en GitHub</a>`);
+  if (r && (r.status === 401 || r.status === 403 || r.status === 404)) { guardarClaveGithub(""); mostrarFormClave(true); }
+}
+// Cómo va el último entrenamiento; mientras esté en marcha (o recién lanzado) se vuelve a mirar cada 20 s.
+async function seguirEntrenamiento() {
+  clearTimeout(entreno.siguiendo);
+  let ultimo = null;
+  try {
+    const r = await github("/runs?per_page=1");
+    if (r.ok) ultimo = ((await r.json()).workflow_runs || [])[0] || null;
+  } catch (e) { /* sin conexión: se muestra lo que se sabe */ }
+  const boton = $("entrenar-btn");
+  const esperando = entreno.lanzado && Date.now() - entreno.lanzado < 120000 &&
+    (!ultimo || Date.parse(ultimo.created_at) < entreno.lanzado - 60000);
+  const enMarcha = ultimo && ultimo.status !== "completed";
+  boton.disabled = esperando || enMarcha;
+  if (esperando) {
+    estadoEntrenar("Entrenamiento lanzado; GitHub lo arranca en unos segundos…");
+  } else if (!ultimo) {
+    estadoEntrenar(`No se pudo consultar el último entrenamiento. <a href="${WEB_ENTRENAR}" target="_blank" rel="noopener">Ver en GitHub</a>`);
+  } else {
+    const cuando = horaLima(ultimo.run_started_at || ultimo.created_at);
+    const como = ultimo.event === "schedule" ? "el de cada lunes" : "lanzado a mano";
+    const ver = `<a href="${esc(ultimo.html_url)}" target="_blank" rel="noopener">ver</a>`;
+    estadoEntrenar(enMarcha ? `Entrenando… (empezó el ${cuando}; tarda unos minutos) · ${ver}`
+      : ultimo.conclusion === "success"
+        ? (entreno.lanzado && Date.parse(ultimo.created_at) >= entreno.lanzado - 60000
+          ? `<span class="sube">Listo: la red ya aprendió.</span> La página se vuelve a publicar con la red nueva en 1-2 minutos: recárgala. · ${ver}`
+          : `Último entrenamiento: ${cuando} (${como}), terminado. · ${ver}`)
+        : `<span class="baja">El último entrenamiento (${cuando}) no terminó bien.</span> · ${ver}`);
+  }
+  if (esperando || enMarcha) entreno.siguiendo = setTimeout(seguirEntrenamiento, esperando ? 5000 : 20000);
+}
+
 fetch("datos.json", {cache: "no-store"}).then((r) => r.json()).then((datos) => {
   pintarComo(datos);
+  pintarEntrenar(datos);
   pintarHoy(datos);
   pintarHistorial(datos);
 }).catch(() => {
