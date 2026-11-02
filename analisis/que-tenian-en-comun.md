@@ -137,3 +137,43 @@ de −20 %, del 11,8 % al 43,3 %).
   edad, volumen relativo), por eso ordena bien las monedas. Algunos rasgos no los tiene tal cual (romper el
   máximo de 20 días, el volumen creciendo durante meses, la parte del volumen en velas verdes); se puede probar si
   le añaden algo, como se hizo con las medias del volumen.
+
+## Las ganadoras de tus listas reales
+
+Desde el 30 de septiembre de 2026, 25 monedas de tus listas de Momento-A y Momento-B llegaron a +50 % (92
+días-moneda de 1069 con resultado; en Momento-B el 10,3 % de los días-moneda, en Momento-A el 7,2 %).
+
+- **Cuantos más rasgos, más subieron**, como en el resto de los datos: con 0 de los 8 rasgos llegó el 5,4 % de los
+  días-moneda; con 2, el 11,9 %; con 4 o más, el 21,6 %.
+- **El precio lateral casi nunca ganó:** lo tenían 2 de las 25 ganadoras (8 %) frente al 29 % de las que no llegaron.
+- **El primer día de la subida muchas no mostraban nada:** 9 de las 25 no tenían ninguno de los 8 rasgos, y
+  ninguna era una moneda recién listada (todas tenían más de 6 meses).
+- **Eran monedas muy castigadas que rebotaron:** en su primer día, la mediana estaba un 87 % bajo su máximo de un
+  año, había caído un 21 % en 30 días y estaba un 26 % bajo su MA(99) (las que no llegaron: −79 %, −4 % y −9 %).
+  En las 183 325 candidatas desde 2023 se confirma solo en parte: estar un 80 % o más bajo el máximo de un año
+  (1,46 veces la media, todos los años) y el rebote volátil (cayó un 20 % en 30 días con volatilidad de 5 % o más:
+  1,36 veces) sí; la vela verde que cierra arriba (0,96) y la caída de 30 días sola (1,06), no.
+
+## ¿Mejoran la red los tres rasgos nuevos o dar más peso a las que subieron?
+
+Se probaron, con la red entrenada como desde ahora (con todo lo que tiene resultado), cuatro versiones con la
+misma configuración y semillas: la actual, con los tres rasgos que la red no tenía (rompe el máximo de 20 días,
+MA(25)/MA(99) del volumen y parte del volumen en velas verdes) y dando a las que llegaron 3 o 10 veces más peso
+(con la puntuación corregida para que siga siendo una probabilidad). Se midieron en cinco cortes (90 días después
+de cada uno) y en tus listas reales (entrenadas solo con lo anterior al 19 de septiembre).
+
+| | Actual | +3 rasgos | Peso ×3 | Peso ×10 |
+|---|---:|---:|---:|---:|
+| AUC, media de 5 cortes | 0,638 | 0,638 | 0,638 | 0,640 |
+| 2 % mejor puntuado: llegaron (media) | 19,1 % | 18,6 % | 18,9 % | 19,3 % |
+| Mejor moneda del día: llegó (media) | 17,6 % | 19,8 % | 18,4 % | 16,4 % |
+| Tus listas: AUC | 0,774 | 0,775 | 0,770 | 0,771 |
+| Tus listas: ganadoras en el top 3 de su día (de 90) | 31 | 31 | 30 | 35 |
+| Tus listas: días en que la mejor llegó (de 25) | 12 | 11 | 11 | 13 |
+| Tus listas: ganadoras con puntuación < 5 % su primer día (de 25) | 7 | 6 | 6 | 5 |
+
+Ninguna mejora de forma clara: los tres rasgos aciertan más con la mejor moneda del día en los cinco cortes, pero
+no en tus listas ni en el 2 % mejor puntuado; el peso ×10 mete más ganadoras de tus listas en el top 3, pero en los
+cortes acierta menos con la mejor del día. Las diferencias están dentro de lo que cambia por azar, así que la red
+se queda como está. En todas las versiones, una de cada cuatro ganadoras de tus listas tenía menos de un 5 % el
+primer día (Q: 2,9 % y subió un 549 %): son subidas que llegaron sin las señales que suelen tener.
