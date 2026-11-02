@@ -242,6 +242,8 @@ archivos de `data.binance.vision`, que se publican al día siguiente hacia las 0
 - [MA(5) y MA(25) del volumen](analisis/volumen-ma5-ma25.md): si poco volumen varios días seguidos (MA(5) por
   debajo de la MA(25)) anuncia una subida (no: con ese patrón suben menos monedas que de media), qué sí dicen
   esas medias y por qué no se añadieron a la red.
+- [Qué tenían en común antes de subir +50 %](analisis/que-tenian-en-comun.md): velas, patrones, tendencia, volumen,
+  acumulación, edad y mercado de las monedas antes de subir, frente a los días en que no subieron.
 
 ## Línea de comandos
 
