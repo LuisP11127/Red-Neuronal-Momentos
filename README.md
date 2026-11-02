@@ -197,8 +197,8 @@ En las dos pestañas:
   que se calculó) y líneas en el precio de la lista y en su +50 %. Las monedas que muestra la red tienen su
   gráfico en la tarjeta, con las 1000 velas más recientes; cualquier moneda de las tablas se abre a pantalla
   completa (rueda o pellizco para acercar, `←` / `→` para pasar de moneda, `0` para ver todo el historial,
-  `Esc` para cerrar), con el volumen y los valores de cada vela al pasar el ratón. Las flechas pasan a la
-  moneda siguiente del mismo día y de la misma tabla. A pantalla completa el gráfico abre con las 1000 velas
+  `Esc` para cerrar), con el volumen (y sus medias MA(5) y MA(25), como en Binance) y los valores de cada vela
+  al pasar el ratón. Las flechas pasan a la moneda siguiente del mismo día y de la misma tabla. A pantalla completa el gráfico abre con las 1000 velas
   más recientes y, mientras está abierto, sigue cargando hacia atrás (1000 por petición, sin mover lo que se
   ve) hasta la primera vela que tiene Binance o hasta 100 000 velas; el pie dice cuántas hay. Con 1h, un par
   de 2017 tiene unas 80 000.
