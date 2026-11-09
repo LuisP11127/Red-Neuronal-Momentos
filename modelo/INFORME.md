@@ -2,17 +2,17 @@
 
 - Entrenamiento: 2023-01-01 a 2026-04-11 (reconstrucción y listas reales de esos días).
 - Validación: 2026-04-22 a 2026-09-19 (reconstrucción y listas reales de esos días).
-- Prueba: 2026-09-30 a 2026-10-28 (listas reales y, para comparar, la reconstrucción de esos días).
+- Prueba: 2026-09-30 a 2026-11-04 (listas reales y, para comparar, la reconstrucción de esos días).
 - Red elegida: media de 5 redes con capas [64, 32], alpha 0.1 y 20 épocas.
 - Umbral: 0.353 (al menos 3 de cada 10 llegaron en la validación).
-- Red que se usa cada día: la misma configuración, entrenada otra vez con todo lo que ya tiene resultado (hasta el 2026-10-28, 183466 filas). Las cifras de abajo son las de la red que no había visto la validación ni la prueba.
+- Red que se usa cada día: la misma configuración, entrenada otra vez con todo lo que ya tiene resultado (hasta el 2026-11-04, 183771 filas). Las cifras de abajo son las de la red que no había visto la validación ni la prueba.
 
 | Tramo | Filas | Llegaron | Al azar | AUC red | AUC logística | Mejor del día (red) | Mostradas | Llegaron de las mostradas | Días con lista |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| entrenamiento | 150791 | 7034 (591 monedas) | 4.7 % | 0.757 | 0.702 | 19.4 % | 263 | 173 (65.8 %) | 94 de 1182 |
-| validacion | 27035 | 1421 (270 monedas) | 5.3 % | 0.639 | 0.639 | 19.9 % | 36 | 11 (30.6 %) | 30 de 151 |
+| entrenamiento | 150791 | 7034 (591 monedas) | 4.7 % | 0.757 | 0.702 | 19.6 % | 258 | 172 (66.7 %) | 93 de 1182 |
+| validacion | 27035 | 1421 (270 monedas) | 5.3 % | 0.639 | 0.639 | 19.2 % | 36 | 11 (30.6 %) | 30 de 151 |
 | prueba: reconstrucción | 664 | 55 (12 monedas) | 8.3 % | 0.722 | 0.770 | 47.4 % | 3 | 0 (0.0 %) | 3 de 19 |
-| prueba: listas reales | 1067 | 90 (25 monedas) | 8.4 % | 0.773 | 0.786 | 48.0 % | 4 | 1 (25.0 %) | 4 de 25 |
+| prueba: listas reales | 1372 | 107 (29 monedas) | 7.8 % | 0.788 | 0.792 | 48.4 % | 5 | 1 (20.0 %) | 5 de 31 |
 
 AUC: probabilidad de que una moneda que llegó a +50 % puntúe más que una que no (0,5 = al azar).
 Mejor del día: de la moneda mejor puntuada de cada día, qué parte llegó.
@@ -23,18 +23,18 @@ Cuánto baja el AUC de la validación al desordenar cada señal.
 
 | Señal | Caída del AUC |
 |---|---:|
-| `libro_prof_2` | 0.0243 |
-| `explosiones_90d` | 0.0226 |
+| `libro_prof_2` | 0.0242 |
+| `explosiones_90d` | 0.0227 |
 | `ls_global` | 0.0090 |
 | `edad_dias` | 0.0054 |
 | `vol_usdt_log` | 0.0051 |
-| `dist_max_365d` | 0.0045 |
+| `dist_max_365d` | 0.0044 |
 | `oi_rel_vol` | 0.0033 |
 | `velas_sobre_ma7` | 0.0030 |
-| `explosiones_30d` | 0.0028 |
+| `explosiones_30d` | 0.0027 |
 | `libro_deseq_1` | 0.0027 |
 | `dist_ma7` | 0.0023 |
 | `var_30d` | 0.0022 |
+| `vol_rel_1d` | 0.0022 |
 | `rango_1d` | 0.0021 |
-| `vol_rel_1d` | 0.0021 |
 | `en_a` | 0.0020 |
