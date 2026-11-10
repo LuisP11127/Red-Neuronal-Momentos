@@ -4,7 +4,8 @@
 
 Escribe ``sitio/index.html`` y ``sitio/datos.json`` con:
 
-- las predicciones de cada día (``predicciones/*.json``, sin las señales);
+- las predicciones de cada día (``predicciones/*.json``, sin las señales), con la puntuación y el riesgo de cada
+  candidata;
 - el resultado a 10 días de cada candidata de esas listas (mínimo, máximo y si llegó a +50 %), medido desde la
   hora y el precio de la lista (``predicciones/resultados.csv``; si aún no terminó, hasta dónde va);
 - las estrellas de cada día, de las listas copiadas (la red no las usa: se muestran al lado);
@@ -53,8 +54,11 @@ def _modelo(ruta: Path) -> Optional[dict]:
     datos = json.loads(ruta.read_text(encoding="utf-8"))
     informe = datos.get("informe", {})
     evaluacion = informe.get("evaluacion", {})
-    return {"umbral": datos.get("umbral"), "tramos": informe.get("tramos"), "entrenada": informe.get("entrenada"),
+    elegido = informe.get("comparacion", {}).get(informe.get("modelo"), {})
+    return {"umbral": datos.get("umbral"), "por_dia": datos.get("por_dia"), "tipo": informe.get("modelo"),
+            "tramos": informe.get("tramos"), "entrenada": informe.get("entrenada"),
             "datos_hasta": informe.get("datos_hasta"),
+            "cortes": {k: elegido.get(k) for k in ("precision", "auc", "caida_mostradas")} if elegido else None,
             "validacion": evaluacion.get("validacion"), "prueba": evaluacion.get("prueba: listas reales")}
 
 
@@ -64,9 +68,9 @@ def construir(destino: Path, predicciones: Path = PREDICCIONES, resultados_csv: 
     dias = []
     for ruta in sorted(predicciones.glob("*.json"), reverse=True) if predicciones.exists() else []:
         p = json.loads(ruta.read_text(encoding="utf-8"))
-        dias.append({**{k: p.get(k) for k in ("fecha", "vela_utc", "hora", "umbral")},
+        dias.append({**{k: p.get(k) for k in ("fecha", "vela_utc", "hora", "umbral", "por_dia")},
                      "monedas": [{k: m.get(k) for k in ("moneda", "mercado", "simbolo", "listas", "puntuacion",
-                                                        "mostrar", "precio")} for m in p.get("monedas", [])]})
+                                                        "riesgo", "mostrar", "precio")} for m in p.get("monedas", [])]})
     predichas = {(d["fecha"], m["moneda"]) for d in dias for m in d["monedas"]}
     resultados = {}
     for (fecha, nombre), fila in aciertos.leer_csv(resultados_csv).items():

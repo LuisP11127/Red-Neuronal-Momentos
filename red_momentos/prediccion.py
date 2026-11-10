@@ -2,7 +2,8 @@
 
 Puntúa las monedas de Momento-A y Momento-B del día cuya vela acaba de cerrar, con las señales de ese
 momento, y guarda ``predicciones/AAAA-MM-DD.json`` (fecha del día de las listas) con todas las candidatas, su
-puntuación, el precio a esa hora y las que pasan el umbral de la red.
+puntuación (+50 %), su riesgo (caer −20 % sin llegar), el precio a esa hora y las que muestra la red (las
+``por_dia`` primeras del día, por puntuación).
 
 Las señales son las mismas que en ``datos/senales.csv``, pero el libro y las métricas de futuros salen de la
 API de Binance, porque los archivos de data.binance.vision se publican al día siguiente:
@@ -128,18 +129,23 @@ def predecir(fecha: date, binance: Binance, modelo: red.Red, ahora: datetime,
 
     calculadas = senales.calcular(filas, senales.en_que_listas(todas), velas, primeras, ahora,
                                   FuturosEnVivo(binance, ahora), hilos=8, en_vivo=True)
-    puntos = modelo.puntuar(red.matriz(calculadas, modelo.entradas)) if calculadas else []
     monedas = []
-    for c, fila, p in zip(del_dia, calculadas, puntos):
-        monedas.append({
-            "moneda": c.moneda, "mercado": c.mercado, "simbolo": c.simbolo, "listas": list(c.listas),
-            "puntuacion": round(float(p), 4), "mostrar": modelo.umbral is not None and float(p) >= modelo.umbral,
-            "precio": precio(binance, c.mercado, c.simbolo),
-            "senales": {k: (float(fila[k]) if fila[k] != "" else None) for k in senales.SENALES},
-        })
-    monedas.sort(key=lambda m: -m["puntuacion"])
+    if calculadas:
+        x = red.matriz(calculadas, modelo.entradas)
+        puntos, riesgo = modelo.puntuar(x), modelo.puntuar_riesgo(x)
+        orden, mostrar = modelo.orden(puntos, riesgo), modelo.mostrar(puntos, riesgo)
+        for i, (c, fila) in enumerate(zip(del_dia, calculadas)):
+            monedas.append({
+                "moneda": c.moneda, "mercado": c.mercado, "simbolo": c.simbolo, "listas": list(c.listas),
+                "puntuacion": round(float(puntos[i]), 4),
+                "riesgo": None if riesgo is None else round(float(riesgo[i]), 4),
+                "orden": float(orden[i]), "mostrar": bool(mostrar[i]),
+                "precio": precio(binance, c.mercado, c.simbolo),
+                "senales": {k: (float(fila[k]) if fila[k] != "" else None) for k in senales.SENALES},
+            })
+    monedas.sort(key=lambda m: -m.pop("orden"))
     return {"fecha": fecha.isoformat(), "vela_utc": dia.isoformat(),
-            "hora": ahora.strftime("%Y-%m-%dT%H:%M:%SZ"), "umbral": modelo.umbral,
+            "hora": ahora.strftime("%Y-%m-%dT%H:%M:%SZ"), "umbral": modelo.umbral, "por_dia": modelo.por_dia,
             "mostradas": [m["moneda"] for m in monedas if m["mostrar"]], "monedas": monedas}
 
 
@@ -168,7 +174,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ruta.write_text(json.dumps(resultado, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     mostradas = resultado["mostradas"]
     print(f"Predicción del {fecha}: {len(resultado['monedas'])} candidatas; "
-          + (f"la red muestra {len(mostradas)}: {', '.join(mostradas)}" if mostradas else "ninguna pasa el umbral"))
+          + (f"la red muestra {len(mostradas)}: {', '.join(mostradas)}" if mostradas else "no muestra ninguna"))
     for aviso in binance.avisos:
         print(f"Aviso: {aviso}", file=sys.stderr)
     return 0
