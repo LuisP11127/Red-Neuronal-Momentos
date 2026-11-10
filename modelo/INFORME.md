@@ -2,9 +2,9 @@
 
 - Muestra las **3 mejores de cada día**, ordenadas por puntuación; el riesgo de caída se muestra al lado, sin cambiar el orden.
 - Modelo elegido: **regresión logística** (el que más acertó con las 3 mejores de cada día en 6 cortes de 90 días, del 2025-03-29 al 2026-09-19).
-- Prueba: 2026-09-30 a 2026-10-28 (listas reales y, para comparar, la reconstrucción de esos días), con el modelo entrenado solo con lo anterior.
+- Prueba: 2026-09-30 a 2026-10-29 (listas reales y, para comparar, la reconstrucción de esos días), con el modelo entrenado solo con lo anterior.
 - Riesgo: un segundo modelo del mismo tipo puntúa la probabilidad de caer −20 % en los 10 días sin llegar a +50 %.
-- Modelo que se usa cada día: el mismo tipo, entrenado otra vez con todo lo que ya tiene resultado (hasta el 2026-10-28, 183752 filas). Las cifras de abajo son las de los modelos que no habían visto esos días.
+- Modelo que se usa cada día: el mismo tipo, entrenado otra vez con todo lo que ya tiene resultado (hasta el 2026-10-29, 183806 filas). Las cifras de abajo son las de los modelos que no habían visto esos días.
 
 ## Comparación en los cortes
 
@@ -32,7 +32,7 @@ Modelo elegido, corte por corte:
 | Tramo | Filas | Llegaron (al azar) | AUC | Llegaron de las 3 mejores | La mejor del día llegó | AUC riesgo | Cayeron −20 % sin llegar, de las 3 mejores | Cayeron −20 % sin llegar, al azar |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | prueba: reconstrucción | 647 | 38 (5.9 %) | 0.670 | 2 de 33: 6.1 % (0-12 %) | 18.2 % | 0.597 | 69.7 % (58-82 %) | 36.2 % |
-| prueba: listas reales | 1358 | 93 (6.8 %) | 0.762 | 23 de 75: 30.7 % (21-40 %) | 40.0 % | 0.600 | 41.3 % (32-51 %) | 32.5 % |
+| prueba: listas reales | 1412 | 95 (6.7 %) | 0.761 | 25 de 78: 32.1 % (23-41 %) | 42.3 % | 0.604 | 41.0 % (32-51 %) | 32.9 % |
 
 AUC: probabilidad de que una moneda que llegó a +50 % puntúe más que una que no (0,5 = al azar).
 Solo cuentan los días cuyos 10 días ya terminaron.
