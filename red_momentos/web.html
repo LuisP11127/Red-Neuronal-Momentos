@@ -184,6 +184,9 @@ const volumenCorto = (v) => v == null || isNaN(v) ? "—"
   : v >= 1e9 ? coma((v / 1e9).toFixed(2)) + " B" : v >= 1e6 ? coma((v / 1e6).toFixed(2)) + " M"
   : v >= 1e3 ? coma((v / 1e3).toFixed(1)) + " K" : coma(v.toFixed(0));
 const puntos = (p) => coma((p * 100).toFixed(0)) + " %";
+const riesgoTexto = (m) => m.riesgo == null ? "—" : puntos(m.riesgo);
+// Por qué un día no muestra monedas: con los modelos antiguos, ninguna pasaba el umbral.
+const sinMostradas = (d) => d.umbral != null ? `ninguna candidata pasó el umbral (${puntos(d.umbral)})` : "no tenía candidatas";
 
 
 function enlace(m) {
@@ -605,6 +608,7 @@ function tarjeta(datos, dia, m, r) {
       ${estrella}<span class="chip">${m.mercado === "futures" ? "Futuros" : "Spot"}</span> ${listas}</div>
     <dl class="datos">
       ${fila("Puntuación de la red", puntos(m.puntuacion))}
+      ${m.riesgo != null ? fila("Riesgo de caer −20 % sin llegar", riesgoTexto(m)) : ""}
       ${fila("Precio de la lista", precio(r ? r.ref : m.precio))}
       ${fila("Precio actual", precio(r && r.actual))}
       ${fila("Variación", pct(r && r.variacion), clase(r && r.variacion))}
@@ -618,7 +622,7 @@ function tarjeta(datos, dia, m, r) {
 function tablaCandidatas(datos, d, el) {
   const resultados = d.monedas.map((m) => resultadoGuardado(datos, d.fecha, m));
   el.innerHTML = `<div class="tabla plana"><table><thead><tr><th>#</th><th>Moneda</th><th>Listas</th><th>Puntuación</th>
-    <th>La muestra</th><th class="n" title="Precio actual frente al precio de la lista">Variación</th><th class="n" title="Desde la hora de la lista, durante 10 días">Mínimo</th>
+    <th class="n" title="Probabilidad de caer −20 % en los 10 días sin llegar a +50 %">Riesgo</th><th>La muestra</th><th class="n" title="Precio actual frente al precio de la lista">Variación</th><th class="n" title="Desde la hora de la lista, durante 10 días">Mínimo</th>
     <th class="n" title="Desde la hora de la lista, durante 10 días">Máximo</th><th>Resultado</th></tr></thead><tbody>
     ${d.monedas.map((m, i) => {
       const r = resultados[i];
@@ -626,7 +630,7 @@ function tablaCandidatas(datos, d, el) {
       return `<tr data-i="${i}"${clases ? ` class="${clases}"` : ""}><td>${i + 1}</td><td>${esc(m.moneda)}${conEstrella(datos, d.fecha, m)}</td>
         <td>${m.listas.map((l) => esc(NOMBRE_LISTA[l] || l)).join(", ")}</td>
         <td><span class="barra" style="width:${Math.round(m.puntuacion * 80)}px"></span>${puntos(m.puntuacion)}</td>
-        <td>${m.mostrar ? "Sí" : ""}</td><td class="n variacion">…</td><td class="n ${clase(r && r.pctMin)}">${pct(r && r.pctMin)}</td>
+        <td class="n">${riesgoTexto(m)}</td><td>${m.mostrar ? "Sí" : ""}</td><td class="n variacion">…</td><td class="n ${clase(r && r.pctMin)}">${pct(r && r.pctMin)}</td>
         <td class="n ${clase(r && r.pctMax)}">${pct(r && r.pctMax)}</td>
         <td>${resultadoTexto(r)}</td></tr>`;
     }).join("")}</tbody></table></div>`;
@@ -693,21 +697,21 @@ async function tablaMostradas(datos, d, el) {
   const mostradas = d.monedas.filter((m) => m.mostrar);
   if (!mostradas.length) {
     const mejor = d.monedas[0];
-    el.innerHTML = `<p class="nota">No mostró ninguna: ninguna candidata pasó el umbral${d.umbral != null ? ` (${puntos(d.umbral)})` : ""}.`
+    el.innerHTML = `<p class="nota">No mostró ninguna: ${sinMostradas(d)}.`
       + (mejor ? ` La mejor puntuada fue ${esc(mejor.moneda)}, con ${puntos(mejor.puntuacion)}.` : "") + `</p>`;
     return;
   }
   el.innerHTML = `<p class="nota">Cargando…</p>`;
   const resultados = await Promise.all(mostradas.map((m) => resultado(datos, d, m)));
   el.innerHTML = `<div class="tabla plana"><table><thead><tr><th>Moneda</th><th class="n">Puntuación</th>
-    <th class="n">Precio de la lista</th><th class="n">Precio actual</th><th class="n" title="Precio actual frente al precio de la lista">Variación</th>
+    <th class="n" title="Probabilidad de caer −20 % en los 10 días sin llegar a +50 %">Riesgo</th><th class="n">Precio de la lista</th><th class="n">Precio actual</th><th class="n" title="Precio actual frente al precio de la lista">Variación</th>
     <th class="n" title="Desde la hora de la lista, durante 10 días">Mínimo</th>
     <th class="n" title="Desde la hora de la lista, durante 10 días">Máximo</th><th>Resultado</th></tr></thead><tbody>
     ${mostradas.map((m, i) => {
       const r = resultados[i];
       return `<tr data-i="${i}"${r && r.dias ? ' class="llego"' : ""}>
         <td><a href="${enlace(m)}" target="_blank" rel="noopener">${esc(m.moneda)}</a>${conEstrella(datos, d.fecha, m)}</td>
-        <td class="n">${puntos(m.puntuacion)}</td><td class="n">${precio(r ? r.ref : m.precio)}</td>
+        <td class="n">${puntos(m.puntuacion)}</td><td class="n">${riesgoTexto(m)}</td><td class="n">${precio(r ? r.ref : m.precio)}</td>
         <td class="n actual">…</td><td class="n variacion">…</td>
         <td class="n ${clase(r && r.pctMin)}">${pct(r && r.pctMin)}</td>
         <td class="n ${clase(r && r.pctMax)}">${pct(r && r.pctMax)}</td><td>${resultadoTexto(r)}</td></tr>`;
@@ -729,12 +733,13 @@ async function pintarHoy(datos) {
   let html = `<h2>Lista del ${fecha(hoy.fecha)}</h2>
     <p class="nota">Calculada el ${horaLima(hoy.hora)} (hora Lima) con ${hoy.monedas.length} candidatas de las listas de ese día.</p>`;
   if (!mostradas.length) {
-    html += `<div class="vacio">En esta lista la red no muestra ninguna moneda: ninguna de las ${hoy.monedas.length} candidatas pasó el umbral.</div>`;
+    html += `<div class="vacio">En esta lista la red no muestra ninguna moneda: ${hoy.umbral != null
+      ? `ninguna de las ${hoy.monedas.length} candidatas pasó el umbral` : "no hay candidatas"}.</div>`;
   } else {
     html += `<div class="graficos-tf">Velas de los gráficos: <span class="tfs" id="tfs-hoy" role="group" aria-label="Temporalidad de las velas"></span></div>
       <div class="tarjetas" id="tarjetas-hoy">${mostradas.map((m) => tarjeta(datos, hoy.fecha, m, null)).join("")}</div>`;
   }
-  html += `<details><summary>Ver todas las candidatas del día, ordenadas por puntuación (pulsa una para ver su gráfico)</summary>
+  html += `<details><summary>Ver todas las candidatas del día, en el orden de la red (pulsa una para ver su gráfico)</summary>
     <div id="candidatas-hoy"></div></details>
     <p class="nota">Los días anteriores están en <a href="#historial" data-ir="historial">Historial</a>.</p>`;
   caja.innerHTML = html;
@@ -822,20 +827,31 @@ function pintarComo(datos) {
   const m = datos.modelo;
   const informe = "https://github.com/LuisP11127/Red-Neuronal-Momentos/blob/main/modelo/INFORME.md";
   if (!m) { document.getElementById("como").innerHTML = `<p class="nota">La red todavía no está entrenada.</p>`; return; }
-  const parte = (e) => e && e.umbral && e.umbral.mostradas
-    ? `mostró ${e.umbral.mostradas} y llegaron ${e.umbral.llegaron} (${coma((e.umbral.precision * 100).toFixed(0))} %; al azar, ${coma((e.base * 100).toFixed(0))} %)`
-    : "no mostró ninguna";
+  const tipos = {red: "una red neuronal", logistica: "una regresión logística", arboles: "árboles de gradiente"};
+  const p = (v) => v == null ? "—" : coma((v * 100).toFixed(0)) + " %";
+  const margen = (par) => par && par[0] != null ? ` (entre ${p(par[0])} y ${p(par[1])})` : "";
+  if (m.por_dia == null) {  // modelo antiguo, con umbral
+    document.getElementById("como").innerHTML = `<p>La red muestra una moneda solo si su puntuación pasa el umbral
+      ${m.umbral == null ? "(ahora no hay umbral, así que no muestra ninguna)" : `(${puntos(m.umbral)})`}.
+      <a href="${informe}" target="_blank" rel="noopener">Informe completo</a>.</p>`;
+    return;
+  }
+  const e = m.prueba;
   document.getElementById("como").innerHTML = `
     <p>Cada día, después del cierre de la vela diaria (19:00 hora Lima), la red puntúa las monedas de Momento-A y
       Momento-B del día con señales de ese momento: velas, medias, volumen, explosiones anteriores, en qué listas salió
-      y, en futuros, el libro de órdenes, el interés abierto y las relaciones long/short. Muestra una moneda solo si su
-      puntuación pasa el umbral
-      ${m.umbral == null ? "(ahora no hay umbral: ninguno llegó a 3 de cada 10 en las pruebas, así que no muestra ninguna)"
-        : `(${puntos(m.umbral)}): el más bajo con el que, en las pruebas con días pasados, al menos 3 de cada 10 llegaron a +50 %`}.</p>
+      y, en futuros, el libro de órdenes, el interés abierto y las
+      relaciones long/short. Da dos números: la <b>puntuación</b> (probabilidad de llegar a +50 % en 10 días) y el
+      <b>riesgo</b> (probabilidad de caer −20 % en esos 10 días sin llegar). Muestra las <b>${m.por_dia} mejores del día</b>
+      por puntuación; el riesgo es un aviso: las monedas que más suben también son las que más caen.</p>
     <p class="nota">El cálculo se lanza a las 19:30 hora Lima; si un día sale más tarde, la lista lleva la hora en que
       se calculó y su resultado (mínimo, máximo y si llegó a +50 %) se mide desde esa hora y el precio de ese momento.</p>
-    <p class="nota">En la validación (${m.tramos ? `${fecha(m.tramos.validacion[0])} de ${m.tramos.validacion[0].slice(0, 4)} a ${fecha(m.tramos.validacion[1])} de ${m.tramos.validacion[1].slice(0, 4)}` : ""})
-      ${parte(m.validacion)}. Con tus listas reales ${parte(m.prueba)}.
+    <p class="nota">Ahora usa ${tipos[m.tipo] || m.tipo}: de los modelos probados, el que más acertó con las ${m.por_dia}
+      mejores de cada día en ${m.tramos && m.tramos.cortes ? m.tramos.cortes.length : ""} tramos de 90 días del pasado,
+      entrenado cada vez solo con lo anterior.${m.cortes ? ` Allí llegó a +50 % el ${p(m.cortes.precision)} de las que habría
+      mostrado y cayó −20 % sin llegar el ${p(m.cortes.caida_mostradas)}.` : ""}
+      ${e && e.mostradas ? `Con tus listas reales (${e.dias} días) llegaron ${e.llegaron_mostradas} de ${e.mostradas}:
+        ${p(e.precision)}${margen(e.precision_intervalo)}; al azar, ${p(e.base)}.` : ""}
       <a href="${informe}" target="_blank" rel="noopener">Informe completo</a>.</p>`;
 }
 

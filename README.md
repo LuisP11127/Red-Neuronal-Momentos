@@ -110,37 +110,42 @@ MA99».
 
 ## La red
 
-`python -m red_momentos.red` entrena la red y escribe `modelo/red.json` (el modelo) y
-`modelo/INFORME.md` (los resultados). Es un perceptrón multicapa de scikit-learn (64 y 32 neuronas); la
-puntuación es la media de 5 redes entrenadas con distinta semilla. Se guarda como cuantiles y pesos en JSON y
-predice con numpy, así no depende de la versión de scikit-learn.
+`python -m red_momentos.red` entrena el modelo y escribe `modelo/red.json` (el modelo) y `modelo/INFORME.md` (los
+resultados). Se guarda como cuantiles, pesos y árboles en JSON y predice con numpy, así no depende de la versión de
+scikit-learn. Los cambios del 9 de noviembre de 2026 y por qué se hicieron están en
+[Mejoras de la red](analisis/mejoras-de-la-red.md).
 
-- **Tramos por fecha**, sin mezclar días y con 11 días de separación (la etiqueta dura 10): prueba con los
-  últimos 90 días (o desde el inicio de las listas reales, mientras lleven menos), validación con los 150
-  días anteriores y entrenamiento con todo lo de antes. En validación y entrenamiento entran la
-  reconstrucción y las listas reales de esos días, así que con el tiempo la red también aprende de tus
-  listas. Entrenar cada lunes mueve los tramos.
-- **Elección:** se prueban dos regularizaciones y dos números de épocas, y se queda la que mejor ordena la
-  validación.
-- **Umbral:** muestra una moneda si su puntuación supera el umbral más bajo con el que, en la validación, al
-  menos **3 de cada 10** llegaron a +50 % (con al menos 20 monedas sobre el umbral). Si ninguno lo consigue,
-  no muestra nada.
-- **Red final:** elegidas la configuración y el umbral, la red que se usa cada día se vuelve a entrenar con todo lo
-  que ya tiene resultado (también los días de la validación y de la prueba, con tus listas reales). Así, cada vez
-  que se entrena aprende de las monedas que llegaron y las que no en los últimos días. En una prueba con cinco
-  cortes desde 2025, la mejor moneda de cada día y el 2 % mejor puntuado acertaron más que con la red que deja fuera
-  los últimos ~170 días. Las cifras del informe siguen siendo las de la red que no había visto esos días.
-- **Comparación:** una regresión logística con las mismas señales y elegir al azar.
-- La red no usa la banda de ±0,2 % del libro: Binance la publica solo desde enero de 2026 y la red
-  aprendería la fecha y no la señal.
-- El informe dice también en qué señales se apoya más la red.
+- **Qué muestra:** las **3 mejores de cada día** por puntuación. Antes mostraba las que pasaban un umbral, pero el
+  umbral se elegía con un modelo y se aplicaba a otro, que puntuaba más bajo: del 21 de octubre al 4 de noviembre
+  de 2026 no mostró ninguna moneda.
+- **Modelos candidatos:** una red neuronal (64 y 32 neuronas, media de 3 semillas), una regresión logística y
+  árboles de gradiente, con las mismas señales.
+- **Elección en cortes:** cada candidato se entrena con todo lo anterior a cada uno de 6 cortes de 90 días (con 11
+  días de separación: la etiqueta dura 10) y se mide en esos 90 días. Se queda el que más acierta con las 3 mejores
+  de cada día, que es lo que se ve; el AUC solo desempata.
+- **Prueba:** los últimos 90 días, o desde el inicio de las listas reales mientras lleven menos, con el modelo
+  entrenado solo con lo anterior. Cada cifra del informe lleva su margen (intervalo del 90 %, remuestreando días).
+- **Solo días cerrados:** solo cuentan los días cuyos 10 días ya terminaron. En un día con candidatas pendientes,
+  las únicas con resultado son las que ya llegaron, y contarlas hacía creer que llegaban más.
+- **Pesos por racha:** una moneda que sale muchos días seguidos es casi siempre la misma subida contada varias
+  veces; cada fila pesa `1/√n`, con `n` los días de su racha.
+- **Riesgo:** un segundo modelo, del mismo tipo, puntúa la probabilidad de caer −20 % en los 10 días sin llegar a
+  +50 %. Se muestra al lado de cada moneda, pero no cambia el orden: de las 3 mejores de cada día, unas 4 de cada 10
+  caían −20 % sin llegar, y ordenar por puntuación × (1 − riesgo) bajaba las caídas solo a costa de acertar menos.
+- **Modelo final:** elegido el tipo, el que se usa cada día se entrena con todo lo que ya tiene resultado (también
+  la prueba, con tus listas reales), así aprende de los últimos resultados. Las cifras del informe son las de los
+  modelos que no habían visto esos días.
+- No usa la banda de ±0,2 % del libro: Binance la publica solo desde enero de 2026 y el modelo aprendería la fecha
+  y no la señal.
+- El informe dice también en qué señales se apoya más el modelo.
 
 ## La predicción de cada día
 
 `python -m red_momentos.prediccion` (paso del workflow **Diario**, programado a las 19:30 hora Lima) puntúa las monedas
 de Momento-A y Momento-B del día cuya vela acaba de cerrar y guarda `predicciones/AAAA-MM-DD.json`: todas
-las candidatas ordenadas por puntuación, el precio a esa hora, cuáles pasan el umbral (`mostrar`) y sus
-señales.
+las candidatas en el orden de la red, con su puntuación (+50 %), su riesgo (caer −20 % sin llegar), el precio a
+esa hora, cuáles muestra (`mostrar`: las 3 primeras del día, `por_dia`) y sus señales. Las listas anteriores al
+9 de noviembre de 2026 son del modelo antiguo, que mostraba las que pasaban un umbral (`umbral`).
 
 Las señales son las mismas que en `datos/senales.csv`, pero el libro y las métricas de futuros se toman de
 la API en ese momento, porque los archivos de data.binance.vision salen al día siguiente. La foto del libro
@@ -167,11 +172,11 @@ señales también son de las 19:30.
 `python -m red_momentos.web sitio` genera la página (la publica el workflow **Web**). Tiene dos pestañas (recuerda la última elegida; `…/#historial` abre el historial):
 
 - **Hoy**
-  - **Lista del día:** solo las monedas que pasan el umbral, cada una con su puntuación, el precio de la
-    lista, el precio actual, el mínimo y el máximo desde la lista, si ya llegó a +50 % y su gráfico. Si
-    ninguna pasa el umbral, lo dice y no muestra nada. Debajo, «Ver todas las candidatas del día», ordenadas
-    por puntuación.
-  - **Cómo decide:** el umbral y los resultados de la red en la validación y con tus listas reales.
+  - **Lista del día:** las 3 mejores del día, cada una con su puntuación, su riesgo de caer −20 % sin llegar, el
+    precio de la lista, el precio actual, el mínimo y el máximo desde la lista, si ya llegó a +50 % y su
+    gráfico. Debajo, «Ver todas las candidatas del día», en el orden de la red.
+  - **Cómo decide:** qué modelo usa, cómo se eligió y cómo acertó en los cortes del pasado y con tus listas
+    reales.
   - **Entrenar la red ahora:** lanza el workflow **Entrenar** sin esperar al lunes y muestra cómo va (y cuándo se
     entrenó la red actual). Para lanzarlo desde la página hace falta una clave de GitHub *fine-grained* con acceso
     solo a este repositorio y el permiso **Actions: Read and write**; se guarda solo en ese navegador y solo se envía
@@ -249,6 +254,8 @@ archivos de `data.binance.vision`, que se publican al día siguiente hacia las 0
   esas medias y por qué no se añadieron a la red.
 - [Qué tenían en común antes de subir +50 %](analisis/que-tenian-en-comun.md): velas, patrones, tendencia, volumen,
   acumulación, edad y mercado de las monedas antes de subir, frente a los días en que no subieron.
+- [Mejoras de la red](analisis/mejoras-de-la-red.md): las 3 mejores del día en lugar del umbral, la comparación de
+  modelos en cortes, los pesos por racha, las señales relativas al día y el riesgo de caída.
 
 ## Línea de comandos
 
