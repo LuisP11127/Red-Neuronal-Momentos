@@ -780,29 +780,37 @@ function pintarHistorial(datos) {
                           : "la red no mostró ninguna")
       + (finales.length ? ` · llegaron a +50 %: ${llegaron} de ${finales.length} con resultado` : "");
   }, (d, el) => {
-    el.innerHTML = `<h3>Lo que mostró la red</h3><div class="mostradas"></div>
+    const r = d.repuntuada;
+    el.innerHTML = (r ? `<p class="nota">Puntuada de nuevo el ${fecha(r.hora.slice(0, 10))} con el modelo actual
+      (${{red: "red neuronal", logistica: "regresión logística", arboles: "árboles de gradiente"}[r.modelo] || r.modelo}),
+      entrenado solo con datos hasta el ${fecha(r.datos_hasta)}: no había visto este día. El precio y la hora de la lista
+      son los de entonces. El modelo de ese día ${r.antes.mostradas.length ? `mostró ${esc(r.antes.mostradas.join(", "))}`
+        : `no mostró ninguna${r.antes.umbral != null ? ` (ninguna pasó el umbral de ${puntos(r.antes.umbral)})` : ""}`}.</p>` : "")
+      + `<h3>Lo que mostró la red</h3><div class="mostradas"></div>
       <h3>Todas las candidatas</h3><div class="candidatas"></div>`;
     tablaMostradas(datos, d, el.querySelector(".mostradas"));
     tablaCandidatas(datos, d, el.querySelector(".candidatas"));
   });
 
-  // Resumen: aciertos de la red frente a todas las candidatas de esos mismos días (solo resultados terminados).
-  let mostradas = 0, llegaron = 0, todas = 0, todasLlegaron = 0;
+  // Resumen: aciertos de la red frente a todas las candidatas de esos mismos días. Solo los días cerrados (todas
+  // sus candidatas con resultado): en los demás, las únicas con resultado son las que ya llegaron.
+  let mostradas = 0, llegaron = 0, todas = 0, todasLlegaron = 0, cerrados = 0;
   for (const d of datos.dias) {
     if (!d.monedas.some((m) => m.mostrar)) continue;
-    for (const m of d.monedas) {
-      const r = resultadoGuardado(datos, d.fecha, m);
-      if (!r || !r.final) continue;
-      todas++; if (r.dias) todasLlegaron++;
-      if (m.mostrar) { mostradas++; if (r.dias) llegaron++; }
-    }
+    const rs = d.monedas.map((m) => resultadoGuardado(datos, d.fecha, m));
+    if (!rs.length || rs.some((r) => !r || !r.final)) continue;
+    cerrados++;
+    d.monedas.forEach((m, i) => {
+      todas++; if (rs[i].dias) todasLlegaron++;
+      if (m.mostrar) { mostradas++; if (rs[i].dias) llegaron++; }
+    });
   }
   const dias = datos.dias.length, conLista = datos.dias.filter((d) => d.monedas.some((m) => m.mostrar)).length;
   $("resumen-historial").innerHTML = `${dias} ${dias === 1 ? "día" : "días"}; `
     + (conLista ? `la red mostró monedas en ${conLista}.` : "la red no mostró monedas en ninguno.")
-    + (mostradas ? ` Monedas mostradas con resultado: ${mostradas}. <strong>Llegaron a +50 %: ${llegaron}
-       (${coma((llegaron / mostradas * 100).toFixed(0))} %)</strong>. Entre todas las candidatas de esos días llegó el
-       ${coma((todasLlegaron / todas * 100).toFixed(0))} %.` : "");
+    + (mostradas ? ` En los ${cerrados} ${cerrados === 1 ? "día que ya cerró" : "días que ya cerraron"} sus 10 días, de las
+       ${mostradas} que mostró <strong>llegaron a +50 % ${llegaron} (${coma((llegaron / mostradas * 100).toFixed(0))} %)</strong>;
+       entre todas las candidatas de esos días llegó el ${coma((todasLlegaron / todas * 100).toFixed(0))} %.` : "");
 }
 
 // Pestañas: se recuerda la última elegida (y #historial abre el historial).
