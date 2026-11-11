@@ -144,8 +144,13 @@ scikit-learn. Los cambios del 9 de noviembre de 2026 y por qué se hicieron est�
 `python -m red_momentos.prediccion` (paso del workflow **Diario**, programado a las 19:30 hora Lima) puntúa las monedas
 de Momento-A y Momento-B del día cuya vela acaba de cerrar y guarda `predicciones/AAAA-MM-DD.json`: todas
 las candidatas en el orden de la red, con su puntuación (+50 %), su riesgo (caer −20 % sin llegar), el precio a
-esa hora, cuáles muestra (`mostrar`: las 3 primeras del día, `por_dia`) y sus señales. Las listas anteriores al
-9 de noviembre de 2026 son del modelo antiguo, que mostraba las que pasaban un umbral (`umbral`).
+esa hora, cuáles muestra (`mostrar`: las 3 primeras del día, `por_dia`) y sus señales.
+
+Las listas anteriores al 9 de noviembre de 2026 se calcularon con el modelo antiguo, que mostraba las que
+pasaban un umbral y no mostró ninguna. `python -m red_momentos.repuntuar` las puntuó otra vez con las señales que
+guardó cada una y el tipo de modelo actual, entrenado solo con datos de antes de la primera de ellas (hasta el 10
+de octubre), para que no haya visto esos días. El precio y la hora de la lista no cambian, y `repuntuada` guarda
+con qué se puntuó y lo que había mostrado el modelo antiguo; la web lo dice en cada uno de esos días.
 
 Las señales son las mismas que en `datos/senales.csv`, pero el libro y las métricas de futuros se toman de
 la API en ese momento, porque los archivos de data.binance.vision salen al día siguiente. La foto del libro
@@ -256,6 +261,10 @@ archivos de `data.binance.vision`, que se publican al día siguiente hacia las 0
   acumulación, edad y mercado de las monedas antes de subir, frente a los días en que no subieron.
 - [Mejoras de la red](analisis/mejoras-de-la-red.md): las 3 mejores del día en lugar del umbral, la comparación de
   modelos en cortes, los pesos por racha, las señales relativas al día y el riesgo de caída.
+- [Explosiones de +50 % en Scanner-pump](analisis/explosiones-scanner-pump.md): las monedas del seguimiento de
+  Scanner-pump que subieron +50 % de mínimo a máximo en un día, cómo estaban el día del análisis, a qué hora
+  explotaron (velas de 15 minutos) y si estaban en las listas y en la red. Incluye el resultado de las listas
+  pasadas puntuadas otra vez.
 
 ## Línea de comandos
 
@@ -275,6 +284,8 @@ python -m red_momentos.red
 # Lista de la red para el día cuya vela acaba de cerrar, y el resultado de las listas desde su hora
 python -m red_momentos.prediccion
 python -m red_momentos.aciertos
+# Puntuar otra vez las listas calculadas con un modelo antiguo (con umbral)
+python -m red_momentos.repuntuar
 # Web (sitio/index.html y sitio/datos.json)
 python -m red_momentos.web sitio
 ```

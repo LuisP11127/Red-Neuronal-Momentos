@@ -68,7 +68,7 @@ def construir(destino: Path, predicciones: Path = PREDICCIONES, resultados_csv: 
     dias = []
     for ruta in sorted(predicciones.glob("*.json"), reverse=True) if predicciones.exists() else []:
         p = json.loads(ruta.read_text(encoding="utf-8"))
-        dias.append({**{k: p.get(k) for k in ("fecha", "vela_utc", "hora", "umbral", "por_dia")},
+        dias.append({**{k: p.get(k) for k in ("fecha", "vela_utc", "hora", "umbral", "por_dia", "repuntuada")},
                      "monedas": [{k: m.get(k) for k in ("moneda", "mercado", "simbolo", "listas", "puntuacion",
                                                         "riesgo", "mostrar", "precio")} for m in p.get("monedas", [])]})
     predichas = {(d["fecha"], m["moneda"]) for d in dias for m in d["monedas"]}
