@@ -219,7 +219,7 @@ ARQUITECTURAS = {
     "mlp_norma_dropout": ("Perceptrón (128 y 64) con normalización por lotes y dropout",
                           lambda n: Perceptron(n, (128, 64), 0.3, True), 1e-4, 3),
     "residual": ("Red residual (3 bloques de 128)", lambda n: Residual(n), 1e-4, 3),
-    "transformador": ("Transformador de señales (FT-Transformer, 2 capas)", lambda n: TransformadorSenales(n), 1e-4, 2),
+    "transformador": ("Transformador de señales (FT-Transformer, 2 capas)", lambda n: TransformadorSenales(n), 1e-4, 1),
     "gru_velas": ("Recurrente (GRU) solo con las 30 velas", lambda n: Recurrente(), 1e-4, 3),
     "cnn_velas": ("Convolucional solo con las 30 velas", lambda n: Convolucional(), 1e-4, 3),
     "gru_senales": ("Recurrente (GRU) con las velas + señales", lambda n: Recurrente(n), 1e-4, 3),

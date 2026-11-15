@@ -265,6 +265,9 @@ archivos de `data.binance.vision`, que se publican al día siguiente hacia las 0
   Scanner-pump que subieron +50 % de mínimo a máximo en un día, cómo estaban el día del análisis, a qué hora
   explotaron (velas de 15 minutos) y si estaban en las listas y en la red. Incluye el resultado de las listas
   pasadas puntuadas otra vez.
+- [Arquitecturas de redes neuronales](analisis/arquitecturas.md): perceptrones de varios tamaños, red residual,
+  transformador de señales y redes recurrentes y convolucionales sobre las 30 velas diarias, medidos en los mismos
+  cortes que la red. Ninguna supera con claridad a la regresión logística actual.
 
 ## Línea de comandos
 
