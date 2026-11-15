@@ -11,8 +11,8 @@ modelo actual (regresión logística) las 3 monedas del día?
   cabe en el ruido.
 - **Más grande es peor.** Entre los perceptrones sobre las señales, el de una capa de 32 empata con la logística
   y cada capa o neurona de más baja el resultado: 19,6 % con 64 y 32, 18,3 % con 256 y 128, 17,5 % con la red
-  residual. Normalización por lotes y *dropout* no lo arreglan (18,1 %). Con unas 9.000 filas que llegaron a +50 %
-  (de 184.000), no hay datos para una red grande.
+  residual y 16,9 % con el transformador, el último de todos. Normalización por lotes y *dropout* no lo
+  arreglan (18,1 %). Con unas 9.000 filas que llegaron a +50 % (de 184.000), no hay datos para una red grande.
 - **Las velas en bruto ordenan peor la lista entera.** Las redes que solo ven velas tienen AUC de 0,60, frente a
   0,64 de las que ven las señales: aciertan parecido arriba de la lista, pero ordenan peor el resto.
 - **El modelo actual se queda.** La logística empata con la mejor red, tarda 16 segundos en todos los cortes (la GRU,
@@ -55,7 +55,7 @@ y una marca de si la vela existe (para monedas con menos de 30 días).
 | Perceptrón ancho (256 y 128) | 18,3 % | 0,634 | 2 | 32,3 % (30 de 93) | 1 min 55 s |
 | Perceptrón (128 y 64) con normalización y *dropout* | 18,1 % | 0,639 | 3 | 31,2 % (29 de 93) | 3 min 10 s |
 | Red residual (3 bloques de 128) | 17,5 % | 0,633 | 3 | 29,0 % (27 de 93) | 6 min 28 s |
-<!-- transformador -->
+| Transformador de señales (FT-Transformer, 1 semilla) | 16,9 % | 0,635 | 2 | 26,9 % (25 de 93) | 72 min |
 
 Al azar, en los cortes llegó entre el 3,6 % y el 8,8 % de las candidatas, según el corte; en las listas reales, el
 6,6 %.
@@ -75,7 +75,7 @@ La GRU gana sobre todo por el corte de septiembre a diciembre de 2025 (31 % fren
 a marzo y en el último. Cada corte son 270 monedas mostradas, y entre semillas de la misma red la cifra se mueve 1
 o 2 puntos.
 
-En las listas reales las 13 quedan entre 28 % y 37 %, y el margen de cada una (unos ±8 puntos con 93 monedas) se
+En las listas reales las 14 quedan entre 27 % y 37 %, y el margen de cada una (unos ±8 puntos con 93 monedas) se
 cruza con el de todas: con un mes de listas no se puede ordenar los modelos.
 
 ## Qué se puede sacar
