@@ -46,18 +46,33 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.reintento.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main  # tras un workflow_run, lo último que guardó
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: python -m red_momentos.web sitio
-      - uses: actions/upload-pages-artifact@v3
+      # Un nombre por intento: al volver a ejecutar el job, el artefacto del intento anterior sigue en la
+      # ejecución y deploy-pages falla si encuentra dos con el mismo nombre.
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: sitio
+          name: github-pages-${{ github.run_attempt }}
+      # A veces deploy-pages pide el artefacto antes de que la API de GitHub lo liste («No artifacts named
+      # github-pages were found»), aunque se acaba de subir. Si falla, se espera y se intenta otra vez.
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+      - if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+      - id: reintento
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}

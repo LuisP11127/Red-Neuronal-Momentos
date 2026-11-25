@@ -32,26 +32,26 @@ jobs:
       PYTHONUNBUFFERED: "1"
       PYTHONIOENCODING: utf-8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Los tres repositorios son públicos: se descarga solo su carpeta de seguimiento.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: LuisP11127/Momento-A
           path: fuentes/momento-a
           sparse-checkout: docs/seguimiento
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: LuisP11127/Momento-B
           path: fuentes/momento-b
           sparse-checkout: docs/seguimiento
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: LuisP11127/Scanner-pump
           path: fuentes/scanner-pump
           sparse-checkout: datos/seguimiento
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements.txt
